@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { donationSchema, onboardingSchema } from "@/lib/rescue-schemas";
 import { scoreRescue } from "@/lib/rescue-scoring";
+import { distanceMiles as haversineMiles } from "@/lib/geo";
 import { z } from 'zod';
 
 export const getWorkspace = createServerFn({ method: "GET" })
@@ -80,7 +81,7 @@ export const createDonation = createServerFn({ method: "POST" })
     const createdAt = Date.now();
     const deadline = new Date(data.pickupDeadline).getTime();
     const candidates = (recipients ?? []).map((recipient) => {
-      const distanceMiles = Math.max(0.8, Math.hypot(recipient.latitude - location.latitude, recipient.longitude - location.longitude) * 52);
+      const distanceMiles = Math.max(0.8, haversineMiles({ latitude: recipient.latitude, longitude: recipient.longitude }, location));
       const result = scoreRescue({ name: recipient.name, distanceMiles, coldStorage: recipient.cold_storage, acceptsCategory: recipient.accepted_categories.includes(data.category), householdsServed: recipient.households_served, capacityLbs: recipient.capacity_lbs, requiredStorage: data.storageRequired, pounds: data.pounds, minutesRemaining: Math.max(0, (deadline - createdAt) / 60000) });
       return { donation_id: donation.id, recipient_org_id: recipient.id, score: result.score, explanation: result.explanation, status: "proposed" as const, eligible: result.eligible };
     }).filter((candidate) => candidate.eligible).map(({ eligible: _eligible, ...candidate }) => candidate);
