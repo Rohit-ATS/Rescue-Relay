@@ -38,8 +38,22 @@ cd frontend && bun install && bun run dev
 ### 2. Available Root Scripts
 - `npm run dev` — Starts the frontend in development mode with HMR and real-time synchronization.
 - `npm run build` — Builds the production bundle.
+- `npm run build:pages` — Builds the static prerendered bundle and prepares it for GitHub Pages deployment.
 - `npm run preview` — Previews the production build locally.
 - `npm run test` — Executes unit and integration test suites.
+
+---
+
+## Live Deployment (GitHub Pages)
+
+RescueRelay is set up for automatic continuous deployment to GitHub Pages via GitHub Actions:
+- **Live Site**: [https://rohit-ats.github.io/Rescue-Relay/](https://rohit-ats.github.io/Rescue-Relay/)
+
+### Enabling GitHub Pages on your repository:
+1. Navigate to **Settings** → **Pages** in your GitHub repository.
+2. Under **Build and deployment** → **Source**, select **GitHub Actions**.
+3. Push to `main` (or run the **Deploy RescueRelay to GitHub Pages** workflow under the **Actions** tab).
+4. GitHub Actions will automatically prerender all routes, configure SPA fallbacks (`404.html`, `.nojekyll`), and publish the site!
 
 ---
 
