@@ -29,3 +29,4 @@ if (fs.existsSync(indexPath)) {
 }
 
 console.log("GitHub Pages output preparation complete.");
+
