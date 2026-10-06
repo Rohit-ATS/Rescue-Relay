@@ -78,6 +78,13 @@
       "when": 1791258317471,
       "tag": "0010_publish_verified_partner_directory",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791268846874,
+      "tag": "0011_add_partner_contact_details",
+      "breakpoints": true
     }
   ]
 }

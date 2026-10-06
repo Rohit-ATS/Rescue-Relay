@@ -134,13 +134,16 @@ Directions service when the browser key authorizes; the distance/time estimate a
 start navigating.
 
 **Partners** is the full directory: every organization in the network, donors and food banks
-alike, filterable by type and searchable by name, address or food category. Food banks show
-households served, intake capacity, cold chain and categories accepted; donors show their
-on-site storage. Nearest first once a location is shared, with coordinator verify/suspend
-controls inline.
+alike, filterable by type and searchable by name, address or food category. Selecting a card
+opens its full profile — phone, email, receiving hours, a map of its location with directions,
+intake limits, and how many rescues it has handled, counted from the records the viewer can
+see. Nearest first once a location is shared, with coordinator verify/suspend controls inline.
 
 Location is optional throughout: without it the lists still render, just ordered by deadline
 rather than distance.
+
+> **Migration 0011** adds the contact columns (phone, email, website, receiving hours) the
+> partner profile shows. Without it those fields read "Not provided"; nothing else breaks.
 
 > **Migration 0010 must be applied** for Partners and Opportunities to show organizations a
 > user is not already involved with. Migration 0009 scoped organization reads to rescues you
@@ -175,7 +178,7 @@ relative to when you run it, so the demo is always current.
 ## Verification
 
 ```bash
-npm run test     # 55 tests: scoring, schemas, routing, geocoding, backoff,\n                 # activity lifecycle, opportunities, distance and routing
+npm run test     # 63 tests: scoring, schemas, routing, geocoding, backoff,\n                 # activity lifecycle, opportunities, partner records,\n                 # distance and routing
 npm run build
 npm run lint     # currently reports pre-existing Prettier formatting diffs in the
                  # generated dense-style files; `npm run format` would resolve them,

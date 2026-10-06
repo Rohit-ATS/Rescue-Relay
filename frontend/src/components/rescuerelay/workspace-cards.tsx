@@ -6,6 +6,8 @@ import {
   MapPin,
   PackageCheck,
   Route as RouteIcon,
+  Mail,
+  Phone,
   ShieldCheck,
   Truck,
   X,
@@ -13,6 +15,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { LiveMap, type MapRoute } from "@/components/rescuerelay/live-map";
 import {
   appleDirectionsUrl,
@@ -22,7 +31,7 @@ import {
   hasPosition,
 } from "@/lib/geo";
 import type { RescueActivity } from "@/lib/rescue-activity";
-import type { FoodBank, Opportunity } from "@/lib/rescue-opportunities";
+import type { FoodBank, Opportunity, PartnerSummary } from "@/lib/rescue-opportunities";
 
 /** Shared timestamp format, matching the rest of the workspace. */
 function date(value: string) {
@@ -42,6 +51,30 @@ export function Empty({ title, copy }: { title: string; copy: string }) {
       <p className="mt-2 text-sm text-muted-foreground">{copy}</p>
     </div>
   );
+}
+
+/** One volunteer run: what it is, where it goes, who it serves, and the drive. */
+/**
+ * Clear, locale-safe timing.
+ *
+ * `toLocaleString` with a short month renders as "19:40 5 thg 10" under a Vietnamese
+ * locale, which is hard to scan and ambiguous about ordering. The time remaining is
+ * what a volunteer actually decides on, so it leads, with the clock time after it.
+ */
+function deadlineLabel(deadline: string, now: number) {
+  const target = new Date(deadline).getTime();
+  const clock = new Date(deadline).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  if (!Number.isFinite(target)) return { text: "No deadline", urgent: false, closed: false };
+  if (target < now)
+    return { text: `Closed ${relativeTime(target, now)} ago`, urgent: false, closed: true };
+  return {
+    text: `${relativeTime(target, now)} left · by ${clock}`,
+    urgent: target - now <= 2 * 60 * 60 * 1000,
+    closed: false,
+  };
 }
 
 /** One volunteer run: what it is, where it goes, who it serves, and the drive. */
@@ -79,202 +112,186 @@ export function OpportunityCard({
         : undefined,
     [routable, bank, o.pickup],
   );
-  const minutesLeft = Math.round((new Date(o.pickupDeadline).getTime() - now) / 60000);
+  const deadline = deadlineLabel(o.pickupDeadline, now);
+
+  const status = o.claimable
+    ? { label: "Ready for a driver", className: "bg-primary text-primary-foreground" }
+    : o.expired
+      ? { label: "Window closed", className: "border-destructive/30 text-destructive" }
+      : o.claimedByUserId
+        ? { label: "Driver assigned", className: "" }
+        : o.destinationConfirmed
+          ? { label: "Awaiting driver", className: "" }
+          : { label: "Awaiting recipient", className: "" };
+
+  // One muted line beats a boxed panel: the Partners tab carries the full profile.
+  const bankFacts = bank
+    ? [
+        bank.coldStorage ? "Cold chain" : "Ambient only",
+        `${bank.capacityLbs.toLocaleString()} lb capacity`,
+        `${bank.householdsServed.toLocaleString()} households`,
+      ].join(" · ")
+    : null;
+
   return (
     <article
-      className={`rounded-md border bg-card p-5 ${o.claimable ? "border-l-4 border-l-primary" : ""}`}
+      className={`rounded-md border bg-card ${o.claimable ? "border-l-4 border-l-primary" : ""}`}
     >
-      <div className="flex flex-wrap justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-xl font-semibold">{o.title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground capitalize">
-            {o.category} · {o.storageRequired}
-          </p>
-        </div>
-        <p className="shrink-0 font-semibold">{o.pounds.toLocaleString()} lb</p>
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 px-4 pt-4">
+        <h3 className="min-w-0 flex-1 truncate text-base font-semibold">{o.title}</h3>
+        <p className="shrink-0 text-base font-semibold tabular-nums">
+          {o.pounds.toLocaleString()} lb
+        </p>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {o.claimable ? (
-          <Badge className="bg-primary text-primary-foreground">Open for a driver</Badge>
-        ) : o.expired ? (
-          <Badge variant="outline" className="text-destructive">
-            Window closed
-          </Badge>
-        ) : o.claimedByUserId ? (
-          <Badge variant="outline">Driver assigned</Badge>
-        ) : (
-          <Badge variant="outline">
-            {o.destinationConfirmed ? "Awaiting driver" : "Awaiting recipient"}
-          </Badge>
-        )}
+
+      <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2 text-xs">
+        <Badge variant={o.claimable ? "default" : "outline"} className={status.className}>
+          {status.label}
+        </Badge>
         {o.milesToPickup !== undefined && (
-          <Badge variant="outline">
+          <Badge variant="outline" className="font-normal">
             <MapPin className="mr-1 size-3" />
-            {formatMiles(o.milesToPickup)} away
+            {formatMiles(o.milesToPickup)}
           </Badge>
         )}
-        {!o.expired && minutesLeft <= 120 && (
-          <Badge variant="outline" className="text-destructive">
-            <Clock3 className="mr-1 size-3" />
-            {minutesLeft <= 0 ? "Expiring" : `${minutesLeft} min left`}
-          </Badge>
-        )}
+        <Badge
+          variant="outline"
+          className={`font-normal ${deadline.urgent || deadline.closed ? "border-destructive/30 text-destructive" : ""}`}
+        >
+          <Clock3 className="mr-1 size-3" />
+          {deadline.text}
+        </Badge>
+        <span className="text-muted-foreground capitalize">
+          {o.category} · {o.storageRequired}
+        </span>
       </div>
-      <dl className="mt-4 space-y-2 border-t pt-4 text-sm">
-        <div className="flex gap-3">
-          <dt className="w-20 shrink-0 text-muted-foreground">Pick up</dt>
-          <dd className="min-w-0">
-            {o.pickupAddress}
-            <br />
-            <span className="text-xs text-muted-foreground">by {date(o.pickupDeadline)}</span>
-          </dd>
-        </div>
-        <div className="flex gap-3">
-          <dt className="w-20 shrink-0 text-muted-foreground">Deliver</dt>
-          <dd className="min-w-0">
+
+      {/* A two-stop strip reads as a journey; the old stacked definition list did not. */}
+      <ol className="mt-3 border-t px-4 py-3 text-sm">
+        <li className="flex gap-3">
+          <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 rounded-full bg-signal" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Pick up
+            </p>
+            <p className="truncate">{o.pickupAddress}</p>
+          </div>
+        </li>
+        <li aria-hidden="true" className="ml-[3px] h-3 w-px bg-border" />
+        <li className="flex gap-3">
+          <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Deliver
+            </p>
             {bank ? (
               <>
-                {bank.name}
-                <br />
-                <span className="text-xs text-muted-foreground">{bank.address}</span>
+                <p className="truncate font-medium">{bank.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{bank.address}</p>
+                {bankFacts && <p className="truncate text-xs text-muted-foreground">{bankFacts}</p>}
                 {!o.destinationConfirmed && (
-                  <span className="block text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Likely destination — not yet accepted
-                  </span>
+                  </p>
                 )}
               </>
             ) : (
-              <span className="text-muted-foreground">No recipient matched yet</span>
+              <p className="text-muted-foreground">No recipient matched yet</p>
             )}
-          </dd>
-        </div>
-      </dl>
-      {bank && (
-        <div className="mt-4 rounded-md border bg-muted/40 p-4">
-          <p className="text-xs font-bold uppercase text-primary">About this food bank</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <Badge
-              variant="outline"
-              className={
-                bank.verificationStatus === "verified"
-                  ? "bg-success/10 text-success border-success/20"
-                  : ""
-              }
-            >
-              {bank.verificationStatus}
-            </Badge>
-            <Badge variant="outline">
-              {bank.householdsServed.toLocaleString()} households served
-            </Badge>
-            <Badge variant="outline">
-              {bank.coldStorage ? "Cold storage on site" : "No cold storage"}
-            </Badge>
-            <Badge variant="outline">{bank.capacityLbs.toLocaleString()} lb capacity</Badge>
           </div>
-          {bank.acceptedCategories.length > 0 && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Accepts: {bank.acceptedCategories.join(", ")}
-            </p>
+        </li>
+      </ol>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3">
+        <p className="text-xs text-muted-foreground">
+          {routable && (o.routeMiles !== undefined || routeSummary) ? (
+            <>
+              <Truck className="mr-1 inline size-3.5" />
+              {routeSummary ? (
+                <>
+                  {routeSummary.distance} · {routeSummary.duration} drive
+                </>
+              ) : (
+                <>
+                  ~{formatMiles(o.routeMiles as number)} ·{" "}
+                  {o.routeMinutes !== undefined ? formatMinutes(o.routeMinutes) : "—"} with handoffs
+                </>
+              )}
+            </>
+          ) : null}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {routable && (
+            <Button variant="ghost" size="sm" onClick={() => setShowRoute((v) => !v)}>
+              <RouteIcon /> {showRoute ? "Hide route" : "Route"}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => onOpen(o.donationId)}>
+            Details <ArrowRight />
+          </Button>
+          {canDrive && o.claimable && o.matchId && (
+            <Button size="sm" disabled={busy} onClick={() => onClaim(o.matchId as string)}>
+              <Truck /> Volunteer
+            </Button>
           )}
         </div>
-      )}
-      {routable && bank && (
-        <div className="mt-4">
-          <Button variant="outline" size="sm" onClick={() => setShowRoute((v) => !v)}>
-            <RouteIcon /> {showRoute ? "Hide driving route" : "Show driving route"}
-          </Button>
-          {showRoute && (
-            <div className="mt-3 space-y-2">
-              <LiveMap
-                compact
-                points={[
-                  {
-                    id: `${o.donationId}-p`,
-                    lat: o.pickup.latitude,
-                    lng: o.pickup.longitude,
-                    label: o.pickupAddress,
-                    kind: "donor",
-                  },
-                  {
-                    id: `${o.donationId}-d`,
-                    lat: bank.latitude,
-                    lng: bank.longitude,
-                    label: bank.name,
-                    kind: "recipient",
-                  },
-                ]}
-                route={mapRoute}
-                onRouteSummary={setRouteSummary}
-              />
-              <p className="text-sm">
-                <Truck className="mr-1 inline size-4" />
-                {routeSummary ? (
-                  <>
-                    {routeSummary.distance} · about {routeSummary.duration} driving
-                  </>
-                ) : (
-                  <>
-                    about {o.routeMiles !== undefined ? formatMiles(o.routeMiles) : "—"} · roughly{" "}
-                    {o.routeMinutes !== undefined ? formatMinutes(o.routeMinutes) : "—"} including
-                    both handoffs <span className="text-muted-foreground">(estimated)</span>
-                  </>
-                )}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button asChild variant="outline" size="sm">
-                  <a
-                    href={directionsUrl(
-                      viewer && hasPosition(viewer) ? viewer : o.pickup,
-                      { latitude: bank.latitude, longitude: bank.longitude },
-                      viewer && hasPosition(viewer) ? o.pickup : undefined,
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open in Google Maps
-                  </a>
-                </Button>
-                <Button asChild variant="outline" size="sm">
-                  <a
-                    href={appleDirectionsUrl(o.pickup, {
-                      latitude: bank.latitude,
-                      longitude: bank.longitude,
-                    })}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open in Apple Maps
-                  </a>
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-4">
-        <Button variant="outline" size="sm" onClick={() => onOpen(o.donationId)}>
-          View rescue <ArrowRight />
-        </Button>
-        {canDrive && o.claimable && o.matchId && (
-          <Button size="sm" disabled={busy} onClick={() => onClaim(o.matchId as string)}>
-            <Truck /> Volunteer to drive
-          </Button>
-        )}
       </div>
+
+      {showRoute && routable && bank && (
+        <div className="space-y-2 border-t px-4 py-3">
+          <LiveMap
+            compact
+            points={[
+              {
+                id: `${o.donationId}-p`,
+                lat: o.pickup.latitude,
+                lng: o.pickup.longitude,
+                label: o.pickupAddress,
+                kind: "donor",
+              },
+              {
+                id: `${o.donationId}-d`,
+                lat: bank.latitude,
+                lng: bank.longitude,
+                label: bank.name,
+                kind: "recipient",
+              },
+            ]}
+            route={mapRoute}
+            onRouteSummary={setRouteSummary}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <a
+                href={directionsUrl(
+                  viewer && hasPosition(viewer) ? viewer : o.pickup,
+                  { latitude: bank.latitude, longitude: bank.longitude },
+                  viewer && hasPosition(viewer) ? o.pickup : undefined,
+                )}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Google Maps
+              </a>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <a
+                href={appleDirectionsUrl(o.pickup, {
+                  latitude: bank.latitude,
+                  longitude: bank.longitude,
+                })}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Apple Maps
+              </a>
+            </Button>
+          </div>
+        </div>
+      )}
     </article>
   );
 }
-const PARTNER_TYPE_LABELS: Record<string, string> = {
-  donor: "Food donor",
-  recipient: "Food bank",
-  coordinator: "Coordinator",
-};
-const VERIFICATION_TONE: Record<string, string> = {
-  verified: "bg-success/10 text-success border-success/20",
-  pending: "bg-signal/10 text-signal-strong border-signal/20",
-  suspended: "bg-destructive/10 text-destructive border-destructive/20",
-};
-
 /** One partner organization, with the detail a donor, driver or coordinator needs. */
 export function PartnerCard({
   partner,
@@ -366,7 +383,355 @@ export function PartnerCard({
           )}
         </div>
       )}
+      <p className="mt-4 flex items-center gap-1 text-xs font-medium text-primary">
+        View details <ArrowRight className="size-3" />
+      </p>
     </article>
+  );
+}
+
+/** The opportunities list, with filters so a volunteer can find work they can take. */
+export function OpportunityBoard({
+  opportunities,
+  viewer,
+  now,
+  canDrive,
+  busy,
+  onOpen,
+  onClaim,
+}: {
+  opportunities: Opportunity[];
+  viewer: { latitude: number; longitude: number } | null;
+  now: number;
+  canDrive: boolean;
+  busy: boolean;
+  onOpen: (id: string) => void;
+  onClaim: (matchId: string) => void;
+}) {
+  const [filter, setFilter] = useState<"open" | "claimable" | "awaiting" | "all">("open");
+
+  const counts = useMemo(
+    () => ({
+      all: opportunities.length,
+      open: opportunities.filter((o) => !o.expired).length,
+      claimable: opportunities.filter((o) => o.claimable).length,
+      awaiting: opportunities.filter((o) => !o.expired && !o.destinationConfirmed).length,
+    }),
+    [opportunities],
+  );
+
+  const visible = useMemo(() => {
+    if (filter === "all") return opportunities;
+    if (filter === "claimable") return opportunities.filter((o) => o.claimable);
+    if (filter === "awaiting")
+      return opportunities.filter((o) => !o.expired && !o.destinationConfirmed);
+    return opportunities.filter((o) => !o.expired);
+  }, [opportunities, filter]);
+
+  const filters: Array<[typeof filter, string, number]> = [
+    ["open", "Still open", counts.open],
+    ["claimable", "Ready to drive", counts.claimable],
+    ["awaiting", "Needs a recipient", counts.awaiting],
+    ["all", "Everything", counts.all],
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-1 rounded-md border p-1">
+        {filters.map(([value, label, count]) => (
+          <Button
+            key={value}
+            size="sm"
+            variant={filter === value ? "default" : "ghost"}
+            className="h-8"
+            aria-pressed={filter === value}
+            onClick={() => setFilter(value)}
+          >
+            {label} <span className="ml-1 opacity-70 tabular-nums">{count}</span>
+          </Button>
+        ))}
+      </div>
+
+      {visible.length ? (
+        <div className="space-y-3">
+          {visible.map((o) => (
+            <OpportunityCard
+              key={o.donationId}
+              opportunity={o}
+              viewer={viewer}
+              now={now}
+              canDrive={canDrive}
+              busy={busy}
+              onOpen={onOpen}
+              onClaim={onClaim}
+            />
+          ))}
+        </div>
+      ) : (
+        <Empty
+          title={
+            filter === "claimable" ? "Nothing ready to drive right now" : "No opportunities here"
+          }
+          copy={
+            filter === "open" || filter === "claimable"
+              ? "New donations appear here as partners post them. Try \u201cEverything\u201d to see closed rescues."
+              : "New donations appear here as partners post them."
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+const PARTNER_TYPE_LABELS: Record<string, string> = {
+  donor: "Food donor",
+  recipient: "Food bank",
+  coordinator: "Coordinator",
+};
+const VERIFICATION_TONE: Record<string, string> = {
+  verified: "bg-success/10 text-success border-success/20",
+  pending: "bg-signal/10 text-signal-strong border-signal/20",
+  suspended: "bg-destructive/10 text-destructive border-destructive/20",
+};
+
+/** Everything known about one partner: how to reach them, where they are, what they have moved. */
+export function PartnerDetail({
+  partner,
+  summary,
+  viewer,
+  coordinator,
+  busy,
+  onVerify,
+  onClose,
+}: {
+  partner: (FoodBank & { milesAway?: number }) | null;
+  summary: PartnerSummary | null;
+  viewer: { latitude: number; longitude: number } | null;
+  coordinator: boolean;
+  busy: boolean;
+  onVerify: (id: string, status: "verified" | "suspended") => void;
+  onClose: () => void;
+}) {
+  if (!partner) return null;
+  const isRecipient = partner.type === "recipient";
+  const located = hasPosition(partner);
+  const origin = viewer && hasPosition(viewer) ? viewer : null;
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{PARTNER_TYPE_LABELS[partner.type] ?? partner.type}</Badge>
+            <Badge
+              variant="outline"
+              className={VERIFICATION_TONE[partner.verificationStatus] ?? ""}
+            >
+              {partner.verificationStatus}
+            </Badge>
+          </div>
+          <DialogTitle className="mt-2 text-2xl">{partner.name}</DialogTitle>
+          <DialogDescription>
+            {partner.address}
+            {partner.milesAway !== undefined && ` · ${formatMiles(partner.milesAway)} from you`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <section>
+          <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Contact</h3>
+          <dl className="mt-3 space-y-2.5 text-sm">
+            <div className="flex gap-3">
+              <dt className="flex w-28 shrink-0 items-center gap-1.5 text-muted-foreground">
+                <Phone className="size-3.5" /> Phone
+              </dt>
+              <dd>
+                {partner.phone ? (
+                  <a
+                    className="font-medium underline underline-offset-2"
+                    href={`tel:${partner.phone.replace(/[^+\d]/g, "")}`}
+                  >
+                    {partner.phone}
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">Not provided</span>
+                )}
+              </dd>
+            </div>
+            <div className="flex gap-3">
+              <dt className="flex w-28 shrink-0 items-center gap-1.5 text-muted-foreground">
+                <Mail className="size-3.5" /> Email
+              </dt>
+              <dd>
+                {partner.contactEmail ? (
+                  <a
+                    className="font-medium underline underline-offset-2"
+                    href={`mailto:${partner.contactEmail}`}
+                  >
+                    {partner.contactEmail}
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">Not provided</span>
+                )}
+              </dd>
+            </div>
+            <div className="flex gap-3">
+              <dt className="flex w-28 shrink-0 items-center gap-1.5 text-muted-foreground">
+                <Clock3 className="size-3.5" /> Hours
+              </dt>
+              <dd>
+                {partner.hoursNote || <span className="text-muted-foreground">Not provided</span>}
+              </dd>
+            </div>
+            <div className="flex gap-3">
+              <dt className="flex w-28 shrink-0 items-center gap-1.5 text-muted-foreground">
+                <MapPin className="size-3.5" /> Address
+              </dt>
+              <dd>{partner.address}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section>
+          <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Location</h3>
+          {located ? (
+            <div className="mt-3 space-y-2">
+              <LiveMap
+                compact
+                points={[
+                  {
+                    id: partner.id,
+                    lat: partner.latitude,
+                    lng: partner.longitude,
+                    label: partner.name,
+                    kind: isRecipient ? "recipient" : "donor",
+                  },
+                ]}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <a
+                    href={directionsUrl(
+                      origin ?? { latitude: partner.latitude, longitude: partner.longitude },
+                      {
+                        latitude: partner.latitude,
+                        longitude: partner.longitude,
+                      },
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Directions in Google Maps
+                  </a>
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <a
+                    href={appleDirectionsUrl(
+                      origin ?? { latitude: partner.latitude, longitude: partner.longitude },
+                      {
+                        latitude: partner.latitude,
+                        longitude: partner.longitude,
+                      },
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Directions in Apple Maps
+                  </a>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              This partner has no mapped coordinates yet.
+            </p>
+          )}
+        </section>
+
+        {isRecipient && (
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Intake</h3>
+            <dl className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-xs text-muted-foreground">Households</dt>
+                <dd className="mt-0.5 text-lg font-semibold">
+                  {partner.householdsServed.toLocaleString()}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Capacity</dt>
+                <dd className="mt-0.5 text-lg font-semibold">
+                  {partner.capacityLbs.toLocaleString()} lb
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Cold chain</dt>
+                <dd className="mt-0.5 font-semibold">
+                  {partner.coldStorage ? "Refrigerated" : "Ambient only"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Accepts</dt>
+                <dd className="mt-0.5 font-semibold capitalize">
+                  {partner.acceptedCategories.length
+                    ? partner.acceptedCategories.join(", ")
+                    : "Not specified"}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        )}
+
+        {summary && (
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-primary">
+              Rescue record
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Counted from the rescues you have access to.
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-xs text-muted-foreground">Rescues</dt>
+                <dd className="mt-0.5 text-lg font-semibold">{summary.totalRescues}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Completed</dt>
+                <dd className="mt-0.5 text-lg font-semibold">{summary.completedRescues}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">In progress</dt>
+                <dd className="mt-0.5 text-lg font-semibold">{summary.activeRescues}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Food moved</dt>
+                <dd className="mt-0.5 text-lg font-semibold">
+                  {Math.round(summary.poundsMoved).toLocaleString()} lb
+                </dd>
+              </div>
+            </dl>
+          </section>
+        )}
+
+        {coordinator && (
+          <div className="flex flex-wrap gap-2 border-t pt-4">
+            {partner.verificationStatus !== "verified" && (
+              <Button disabled={busy} onClick={() => onVerify(partner.id, "verified")}>
+                <ShieldCheck /> Verify partner
+              </Button>
+            )}
+            {partner.verificationStatus !== "suspended" && (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => onVerify(partner.id, "suspended")}
+              >
+                <X /> Suspend partner
+              </Button>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -379,6 +744,8 @@ export function PartnerDirectory({
   onVerify,
   onRequestLocation,
   locating,
+  viewer,
+  summarize,
 }: {
   partners: Array<FoodBank & { milesAway?: number }>;
   coordinator: boolean;
@@ -387,9 +754,12 @@ export function PartnerDirectory({
   onVerify: (id: string, status: "verified" | "suspended") => void;
   onRequestLocation: () => void;
   locating: boolean;
+  viewer: { latitude: number; longitude: number } | null;
+  summarize: (partnerId: string) => PartnerSummary;
 }) {
   const [kind, setKind] = useState<"all" | "recipient" | "donor">("all");
   const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<(FoodBank & { milesAway?: number }) | null>(null);
 
   const counts = useMemo(
     () => ({
@@ -482,6 +852,16 @@ export function PartnerDirectory({
           }
         />
       )}
+
+      <PartnerDetail
+        partner={selected}
+        summary={selected ? summarize(selected.id) : null}
+        viewer={viewer}
+        coordinator={coordinator}
+        busy={busy}
+        onVerify={onVerify}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }

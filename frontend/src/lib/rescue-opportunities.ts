@@ -26,6 +26,11 @@ export type FoodBank = {
   householdsServed: number;
   acceptedCategories: string[];
   verificationStatus: string;
+  /** Contact details. Optional because migration 0011 may not be applied yet. */
+  phone: string;
+  contactEmail: string;
+  website: string;
+  hoursNote: string;
 };
 
 export type Opportunity = {
@@ -90,6 +95,11 @@ type OrganizationRow = {
   households_served: number;
   accepted_categories: string[];
   verification_status: string;
+  // Added by migration 0011; absent from the row until it is applied.
+  phone?: string | null;
+  contact_email?: string | null;
+  website?: string | null;
+  hours_note?: string | null;
 };
 
 type DeliveryRow = { id: string; match_id: string; driver_user_id: string | null };
@@ -119,6 +129,10 @@ export function toFoodBank(org: OrganizationRow): FoodBank {
     householdsServed: org.households_served,
     acceptedCategories: org.accepted_categories ?? [],
     verificationStatus: org.verification_status,
+    phone: org.phone ?? "",
+    contactEmail: org.contact_email ?? "",
+    website: org.website ?? "",
+    hoursNote: org.hours_note ?? "",
   };
 }
 
@@ -239,4 +253,53 @@ export function buildOpportunities(
     if (am !== bm) return am - bm;
     return new Date(a.pickupDeadline).getTime() - new Date(b.pickupDeadline).getTime();
   });
+}
+
+export type PartnerSummary = {
+  /** Rescues this partner has been part of, in any role. */
+  totalRescues: number;
+  /** Rescues that reached a confirmed delivery. */
+  completedRescues: number;
+  /** Pounds moved through completed rescues. */
+  poundsMoved: number;
+  /** Rescues still in flight. */
+  activeRescues: number;
+};
+
+/**
+ * What this partner has actually done, counted from the rescues the viewer can see.
+ *
+ * Numbers are therefore scoped by RLS: a coordinator sees the whole picture, a
+ * volunteer sees only the rescues they were party to.
+ */
+export function summarizePartner(
+  partnerId: string,
+  input: Pick<OpportunityInputs, "donations" | "matches"> & {
+    donorOrgIdByDonation?: Map<string, string | null>;
+  },
+): PartnerSummary {
+  const asRecipient = new Set(
+    input.matches
+      .filter((m) => m.recipient_org_id === partnerId && m.status === "accepted")
+      .map((m) => m.donation_id),
+  );
+  const asDonor = new Set(
+    input.donations
+      .filter((d) => input.donorOrgIdByDonation?.get(d.id) === partnerId)
+      .map((d) => d.id),
+  );
+  const involved = input.donations.filter((d) => asRecipient.has(d.id) || asDonor.has(d.id));
+
+  const completed = involved.filter((d) => d.status === "delivered");
+  const poundsMoved = completed.reduce((sum, d) => {
+    const n = typeof d.pounds === "string" ? Number(d.pounds) : d.pounds;
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+
+  return {
+    totalRescues: involved.length,
+    completedRescues: completed.length,
+    poundsMoved,
+    activeRescues: involved.filter((d) => !CLOSED_STATUSES.has(d.status)).length,
+  };
 }

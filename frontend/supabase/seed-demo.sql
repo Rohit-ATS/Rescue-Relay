@@ -99,21 +99,23 @@ DELETE FROM public.organizations WHERE id   >= 'd2000000-0000-4000-a000-00000000
 -- 3. Organizations
 -- ===========================================================================
 -- Recipients are the food banks shown in Partners and named on each Opportunity.
+-- Contact columns come from migration 0011; apply it before running this, or drop the
+-- last four values from each row.
 INSERT INTO public.organizations
-  (id, name, type, verification_status, address, latitude, longitude, cold_storage, capacity_lbs, accepted_categories, households_served)
+  (id, name, type, verification_status, address, latitude, longitude, cold_storage, capacity_lbs, accepted_categories, households_served, phone, contact_email, hours_note, website)
 VALUES
-  ('d2000000-0000-4000-a000-000000000001', 'Riverbend Food Pantry',          'recipient', 'verified',  '2220 E 17th St, Des Moines, IA 50316',   41.614357, -93.591134, true,  420, ARRAY['prepared meals','produce','dairy'],          310),
-  ('d2000000-0000-4000-a000-000000000002', 'Southside Community Table',      'recipient', 'verified',  '100 Army Post Rd, Des Moines, IA 50315',  41.526379, -93.617538, true,  600, ARRAY['produce','bakery','dairy','prepared meals'], 540),
-  ('d2000000-0000-4000-a000-000000000003', 'Mulberry Street Shelter Kitchen','recipient', 'verified',  '1420 Mulberry St, Des Moines, IA 50314',  41.582870, -93.633848, true,  250, ARRAY['prepared meals','bakery'],                   180),
-  ('d2000000-0000-4000-a000-000000000004', 'Hartford Avenue Neighbors',      'recipient', 'verified',  '1203 Hartford Ave, Des Moines, IA 50315', 41.569679, -93.598394, false, 150, ARRAY['produce','bakery'],                           95),
-  ('d2000000-0000-4000-a000-000000000005', 'Hickman Road Pantry',            'recipient', 'verified',  '1815 Hickman Rd, Des Moines, IA 50314',   41.615109, -93.641508, true,  380, ARRAY['produce','dairy','prepared meals'],          265),
+  ('d2000000-0000-4000-a000-000000000001', 'Riverbend Food Pantry',          'recipient', 'verified',  '2220 E 17th St, Des Moines, IA 50316',   41.614357, -93.591134, true,  420, ARRAY['prepared meals','produce','dairy'],          310, '515-555-0141', 'intake@riverbendpantry-qa.org', 'Mon-Sat 8am-5pm', 'https://riverbendpantry-qa.org'),
+  ('d2000000-0000-4000-a000-000000000002', 'Southside Community Table',      'recipient', 'verified',  '100 Army Post Rd, Des Moines, IA 50315',  41.526379, -93.617538, true,  600, ARRAY['produce','bakery','dairy','prepared meals'], 540, '515-555-0162', 'receiving@southsidetable-qa.org', 'Daily 7am-7pm', 'https://southsidetable-qa.org'),
+  ('d2000000-0000-4000-a000-000000000003', 'Mulberry Street Shelter Kitchen','recipient', 'verified',  '1420 Mulberry St, Des Moines, IA 50314',  41.582870, -93.633848, true,  250, ARRAY['prepared meals','bakery'],                   180, '515-555-0178', 'kitchen@mulberryshelter-qa.org', 'Mon-Fri 6am-8pm', 'https://mulberryshelter-qa.org'),
+  ('d2000000-0000-4000-a000-000000000004', 'Hartford Avenue Neighbors',      'recipient', 'verified',  '1203 Hartford Ave, Des Moines, IA 50315', 41.569679, -93.598394, false, 150, ARRAY['produce','bakery'],                           95, '515-555-0109', 'hello@hartfordneighbors-qa.org', 'Tue, Thu 9am-2pm', 'https://hartfordneighbors-qa.org'),
+  ('d2000000-0000-4000-a000-000000000005', 'Hickman Road Pantry',            'recipient', 'verified',  '1815 Hickman Rd, Des Moines, IA 50314',   41.615109, -93.641508, true,  380, ARRAY['produce','dairy','prepared meals'],          265, '515-555-0133', 'dock@hickmanroadpantry-qa.org', 'Mon-Fri 8am-4pm', 'https://hickmanroadpantry-qa.org'),
   -- Not verified: proves the directory hides unverified partners from volunteers
   -- while coordinators still see them and can act.
-  ('d2000000-0000-4000-a000-000000000006', 'Capitol East Community Fridge',  'recipient', 'pending',   '3000 E University Ave, Des Moines, IA 50317', 41.600633, -93.558327, true, 120, ARRAY['produce','dairy'],                        70),
-  ('d2000000-0000-4000-a000-000000000007', 'Aurora Avenue Relief Center',    'recipient', 'suspended', '6200 Aurora Ave, Urbandale, IA 50322',    41.636603, -93.703255, true,  300, ARRAY['produce','bakery'],                          210),
+  ('d2000000-0000-4000-a000-000000000006', 'Capitol East Community Fridge',  'recipient', 'pending',   '3000 E University Ave, Des Moines, IA 50317', 41.600633, -93.558327, true, 120, ARRAY['produce','dairy'],                        70, '515-555-0190', 'team@capitoleastfridge-qa.org', 'Open 24/7 (unstaffed)', ''),
+  ('d2000000-0000-4000-a000-000000000007', 'Aurora Avenue Relief Center',    'recipient', 'suspended', '6200 Aurora Ave, Urbandale, IA 50322',    41.636603, -93.703255, true,  300, ARRAY['produce','bakery'],                          210, '515-555-0155', 'office@auroraavenue-qa.org', 'Suspended pending review', ''),
   -- Donor-side organizations.
-  ('d2000000-0000-4000-a000-000000000008', 'Court Avenue Kitchen Co.',       'donor',     'verified',  '420 Court Ave, Des Moines, IA 50309',     41.584932, -93.621926, true,  0,   ARRAY[]::text[],                                      0),
-  ('d2000000-0000-4000-a000-000000000009', 'Grand Avenue Hotel Kitchen',     'donor',     'verified',  '700 Grand Ave, Des Moines, IA 50309',     41.587423, -93.626576, true,  0,   ARRAY[]::text[],                                      0);
+  ('d2000000-0000-4000-a000-000000000008', 'Court Avenue Kitchen Co.',       'donor',     'verified',  '420 Court Ave, Des Moines, IA 50309',     41.584932, -93.621926, true,  0,   ARRAY[]::text[],                                      0, '515-555-0117', 'surplus@courtavekitchen-qa.org', 'Pickups after 2pm daily', 'https://courtavekitchen-qa.org'),
+  ('d2000000-0000-4000-a000-000000000009', 'Grand Avenue Hotel Kitchen',     'donor',     'verified',  '700 Grand Ave, Des Moines, IA 50309',     41.587423, -93.626576, true,  0,   ARRAY[]::text[],                                      0, '515-555-0124', 'banquets@grandavehotel-qa.org', 'Pickups 9pm-11pm', 'https://grandavehotel-qa.org');
 
 -- ===========================================================================
 -- 4. Profiles and roles

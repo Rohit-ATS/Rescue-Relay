@@ -3,6 +3,7 @@ import {
   buildOpportunities,
   listFoodBanks,
   listPartners,
+  summarizePartner,
   type OpportunityInputs,
 } from "@/lib/rescue-opportunities";
 
@@ -196,5 +197,66 @@ describe("Food bank directory", () => {
   it("includes pending and suspended partners so coordinators can act on them", () => {
     const banks = listFoodBanks([org({ id: "p", verification_status: "pending" })], null);
     expect(banks[0]?.verificationStatus).toBe("pending");
+  });
+});
+
+describe("Partner rescue record", () => {
+  it("counts rescues a partner received, split by outcome", () => {
+    const summary = summarizePartner("org-1", {
+      donations: [
+        donation({ id: "done-1", status: "delivered", pounds: 150 }),
+        donation({ id: "done-2", status: "delivered", pounds: 90 }),
+        donation({ id: "live-1", status: "driver_assigned", pounds: 200 }),
+      ],
+      matches: [
+        match({ id: "m1", donation_id: "done-1" }),
+        match({ id: "m2", donation_id: "done-2" }),
+        match({ id: "m3", donation_id: "live-1" }),
+      ],
+    });
+    expect(summary).toEqual({
+      totalRescues: 3,
+      completedRescues: 2,
+      poundsMoved: 240,
+      activeRescues: 1,
+    });
+  });
+
+  it("counts rescues a donor organization supplied", () => {
+    const summary = summarizePartner("org-donor", {
+      donations: [donation({ id: "d1", status: "delivered", pounds: 310 })],
+      matches: [],
+      donorOrgIdByDonation: new Map([["d1", "org-donor"]]),
+    });
+    expect(summary).toMatchObject({ totalRescues: 1, completedRescues: 1, poundsMoved: 310 });
+  });
+
+  it("ignores offers the partner did not accept", () => {
+    const summary = summarizePartner("org-1", {
+      donations: [donation({ id: "d1", status: "delivered" })],
+      matches: [match({ id: "m1", donation_id: "d1", status: "declined" })],
+    });
+    expect(summary.totalRescues).toBe(0);
+  });
+
+  it("does not double-count a rescue a partner both supplied and received", () => {
+    const summary = summarizePartner("org-1", {
+      donations: [donation({ id: "d1", status: "delivered", pounds: 100 })],
+      matches: [match({ id: "m1", donation_id: "d1" })],
+      donorOrgIdByDonation: new Map([["d1", "org-1"]]),
+    });
+    expect(summary.totalRescues).toBe(1);
+    expect(summary.poundsMoved).toBe(100);
+  });
+
+  it("returns zeroes for a partner with no rescues the viewer can see", () => {
+    expect(
+      summarizePartner("org-unknown", { donations: [donation()], matches: [match()] }),
+    ).toEqual({
+      totalRescues: 0,
+      completedRescues: 0,
+      poundsMoved: 0,
+      activeRescues: 0,
+    });
   });
 });
