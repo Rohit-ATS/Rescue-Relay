@@ -40,7 +40,40 @@ function AuthPage() {
     } catch(err) { setMessage(err instanceof Error ? err.message : 'Unable to connect. Please try again.'); } finally { setBusy(false); }
   }
   async function resend(){setBusy(true);try{const origin = window.location.origin; const base = import.meta.env.BASE_URL.replace(/\/$/, ""); const {error}=await supabase.auth.resend({type:'signup',email:pending,options:{emailRedirectTo:`${origin}${base}/auth`}});setMessage(error?error.message:`Confirmation email re-sent to ${pending}. It can take a minute to arrive.`);}catch(err){setMessage(err instanceof Error?err.message:'Could not resend the confirmation email.');}finally{setBusy(false);}}
-  async function google(){setBusy(true);setMessage('');try{const origin = window.location.origin; const base = import.meta.env.BASE_URL.replace(/\/$/, ""); const result=await lovable.auth.signInWithOAuth('google',{redirect_uri:`${origin}${base}`});if(result.error)throw result.error;if(!result.redirected) await navigate({to:'/dashboard',replace:true});}catch(err){setMessage(err instanceof Error?err.message:'Google sign-in failed. Try again.');}finally{setBusy(false);}}
+  async function google(){
+    setBusy(true);
+    setMessage('');
+    try {
+      const origin = window.location.origin;
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const redirectTo = `${origin}${base}/dashboard`;
+
+      // Attempt standard Supabase OAuth first
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (error) {
+        if (error.message.includes('missing OAuth secret') || error.message.includes('Unsupported provider')) {
+          setMessage('Google Sign-In is not yet configured with a Google Client Secret in Supabase. Please sign in with your email and password below.');
+        } else {
+          setMessage(error.message);
+        }
+        return;
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+    } catch(err) {
+      setMessage(err instanceof Error ? err.message : 'Google sign-in is currently unavailable. Please use email and password.');
+    } finally {
+      setBusy(false);
+    }
+  }
   return <div className="min-h-screen bg-muted/40 md:grid md:grid-cols-[1fr_1.05fr]">
     <div className="flex min-h-screen flex-col px-5 py-6 md:px-12"><div className="flex items-center justify-between"><Brand/><Button asChild variant="ghost" size="sm"><Link to="/"><ArrowLeft/> Home</Link></Button></div>
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-12"><p className="text-sm font-bold uppercase text-primary">Partner network</p><h1 className="mt-3 text-4xl font-semibold">{mode==='signin'?'Welcome back':mode==='signup'?'Join RescueRelay':'Reset your password'}</h1><p className="mt-3 text-muted-foreground">{mode==='signup'?'Create a verified partner profile in a few steps.':'Coordinate safe food rescue from one secure workspace.'}</p>
