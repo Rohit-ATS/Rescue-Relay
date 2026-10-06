@@ -1,0 +1,19 @@
+import { z } from "zod";
+
+export const donationSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  category: z.string().trim().min(2).max(60),
+  pounds: z.coerce.number().positive().max(100000),
+  pickupAddress: z.string().trim().min(5).max(240),
+  pickupDeadline: z.string().datetime(),
+  storageRequired: z.enum(["ambient", "refrigerated", "frozen"]),
+  allergens: z.string().trim().max(500),
+  notes: z.string().trim().max(1000),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+});
+
+export const onboardingSchema = z.object({
+  fullName: z.string().trim().min(2).max(100),
+  role: z.enum(["donor", "recipient", "driver", "coordinator"]),
+});
