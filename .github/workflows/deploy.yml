@@ -1,0 +1,64 @@
+name: Deploy RescueRelay to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Build static site for GitHub Pages
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path != '' && format('{0}/', steps.pages.outputs.base_path) || '/Rescue-Relay/' }}
+          VITE_BASE_PATH: ${{ steps.pages.outputs.base_path != '' && format('{0}/', steps.pages.outputs.base_path) || '/Rescue-Relay/' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://rwvjkzpugmlrmcdgltwu.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_dxH-ZdsppAxtwjA1A9NBAQ_ofTIuX3m' }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID || 'rwvjkzpugmlrmcdgltwu' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://rwvjkzpugmlrmcdgltwu.supabase.co' }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_dxH-ZdsppAxtwjA1A9NBAQ_ofTIuX3m' }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID || 'rwvjkzpugmlrmcdgltwu' }}
+          VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY: ${{ secrets.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY || 'AIzaSyBmvJph4LmrbtW7skeczzpBIyb9WWzFKo4' }}
+          VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID: ${{ secrets.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID || '5a1a33b487a7d37b0e3340bb91e22012' }}
+        run: |
+          npm run build:pages
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'frontend/.output/public'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
