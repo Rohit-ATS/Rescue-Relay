@@ -57,3 +57,4 @@ serve(async (req) => {
 
   return Response.redirect(authUrl, 302);
 });
+

@@ -104,3 +104,4 @@ serve(async (req) => {
     newInboxItems: itemsFound,
   });
 });
+

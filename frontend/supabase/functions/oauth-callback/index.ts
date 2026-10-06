@@ -70,3 +70,4 @@ serve(async (req) => {
     return Response.redirect(dest.toString(), 302);
   }
 });
+

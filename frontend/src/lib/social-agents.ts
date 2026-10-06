@@ -55,3 +55,4 @@ export async function startSocialOAuth(platform: string) {
     window.location.href = data.url;
   }
 }
+

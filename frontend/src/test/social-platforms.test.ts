@@ -105,3 +105,4 @@ describe('AI Agents & Food Safety Guardrails', () => {
     expect(guard.problems[0]).toContain('Allergens not mentioned');
   });
 });
+
