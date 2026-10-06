@@ -113,10 +113,43 @@ Details that matter in the field, in [`src/lib/live-sync.tsx`](frontend/src/lib/
 
 ---
 
+## Workspace views
+
+All four derive from the same RLS-scoped workspace query, so nothing can drift out of sync
+with the rescue records themselves. The derivations are pure functions with their own tests.
+
+**Activity** ([`rescue-activity.ts`](frontend/src/lib/rescue-activity.ts)) splits a user's own
+involvements into *current* and *recent*. Signing up to drive a route puts it under current;
+confirming the delivery moves it to recent with the time it closed. The same applies to a
+recipient's offers and a donor's postings. One rescue yields one entry, labelled with the
+user's most hands-on role, and anything blocked on them floats to the top with a "Waiting on
+you" badge and the action inline.
+
+**Opportunities** ([`rescue-opportunities.ts`](frontend/src/lib/rescue-opportunities.ts)) lists
+runs a volunteer can sign up for, nearest first when they share a location. Each one names the
+food bank it serves — capacity, cold chain, households served, categories accepted — and driver
+runs expand to a route map with distance and drive time. Routes render through the Maps JS
+Directions service when the browser key authorizes; the distance/time estimate and the
+"Open in Google Maps" / "Open in Apple Maps" links need no key at all, so a driver can always
+start navigating.
+
+**Partners** lists every verified food bank with the same detail, nearest first, and gives
+coordinators verify/suspend controls inline.
+
+Location is optional throughout: without it the lists still render, just ordered by deadline
+rather than distance.
+
+> **Migration 0010 must be applied** for Partners and Opportunities to show food banks a user
+> is not already involved with. Migration 0009 scoped organization reads to rescues you are
+> party to; 0010 re-opens *verified recipient* organizations only, leaving pending, suspended
+> and donor organizations hidden.
+
+---
+
 ## Verification
 
 ```bash
-npm run test     # 17 tests across scoring, schemas, routing, geocoding, backoff
+npm run test     # 55 tests: scoring, schemas, routing, geocoding, backoff,\n                 # activity lifecycle, opportunities, distance and routing
 npm run build
 npm run lint     # currently reports pre-existing Prettier formatting diffs in the
                  # generated dense-style files; `npm run format` would resolve them,

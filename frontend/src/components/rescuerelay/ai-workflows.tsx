@@ -63,7 +63,7 @@ interface AiWorkflowsProps {
     organizations: OrganizationItem[];
     matches?: Array<{ id: string; donation_id: string; recipient_org_id: string; score: number; status: string }>;
     deliveries?: Array<{ id: string; match_id: string; driver_name: string; delivered_at?: string | null }>;
-    profile?: { full_name?: string; organization_id?: string | null };
+    profile?: { full_name?: string; organization_id?: string | null } | null;
     roles?: Array<{ role: string }>;
   };
   role: string;
@@ -256,6 +256,10 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
       toast.error('No rescue selected to generate broadcast from.');
       return;
     }
+    if (!activeAgent) {
+      toast.error('No agent configured to generate a broadcast.');
+      return;
+    }
 
     setIsGenerating(true);
     setTimeout(() => {
@@ -314,6 +318,10 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
   const handlePublishNow = () => {
     if (!generatedDraft) {
       toast.error('Generate or type a broadcast message first.');
+      return;
+    }
+    if (!activeAgent) {
+      toast.error('No agent configured to publish this broadcast.');
       return;
     }
 

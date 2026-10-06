@@ -71,6 +71,13 @@
       "when": 1791254031737,
       "tag": "0009_restrict_organization_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791258317471,
+      "tag": "0010_publish_verified_recipient_directory",
+      "breakpoints": true
     }
   ]
 }

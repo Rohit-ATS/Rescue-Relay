@@ -3,6 +3,8 @@ import { MapPin, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type MapInstance = { fitBounds: (bounds: unknown, padding?: number) => void };
+type DirectionsLeg = { distance?: { text: string }; duration?: { text: string } };
+type DirectionsResult = { routes?: Array<{ legs?: DirectionsLeg[] }> };
 declare global {
   interface Window {
     initRescueRelayMap?: () => void;
@@ -11,10 +13,15 @@ declare global {
       Map: new (element: HTMLElement, options: Record<string, unknown>) => MapInstance;
       Marker: new (options: Record<string, unknown>) => { setMap: (map: unknown) => void };
       LatLngBounds: new () => { extend: (point: { lat: number; lng: number }) => void };
+      DirectionsService: new () => { route: (request: Record<string, unknown>) => Promise<DirectionsResult> };
+      DirectionsRenderer: new (options: Record<string, unknown>) => { setMap: (map: unknown) => void; setDirections: (result: DirectionsResult) => void };
+      TravelMode: { DRIVING: string };
     } };
   }
 }
 export type MapPoint = { id: string; lat: number; lng: number; label: string; kind: 'donor' | 'recipient' };
+/** Pickup to drop-off, drawn as a real driving route when the Maps key authorizes. */
+export type MapRoute = { origin: { lat: number; lng: number }; destination: { lat: number; lng: number } };
 let mapLoader: Promise<void> | undefined;
 function loadMaps(key: string, channel: string) {
   if (window.google?.maps.Map) return Promise.resolve();
@@ -31,7 +38,7 @@ function loadMaps(key: string, channel: string) {
   });
   return mapLoader;
 }
-export function LiveMap({ compact = false, points = [] }: { compact?: boolean; points?: MapPoint[] }) {
+export function LiveMap({ compact = false, points = [], route, onRouteSummary }: { compact?: boolean; points?: MapPoint[]; route?: MapRoute | undefined; onRouteSummary?: ((summary: { distance: string; duration: string } | null) => void) | undefined }) {
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
@@ -41,6 +48,7 @@ export function LiveMap({ compact = false, points = [] }: { compact?: boolean; p
   useEffect(() => {
     let active = true;
     const markers: Array<{ setMap: (map: unknown) => void }> = [];
+    const renderers: Array<{ setMap: (map: unknown) => void }> = [];
     const authError = () => { if(active) {setReady(false);setError('Google Maps did not authorize this address. The managed map is available on the RescueRelay Lovable preview and published website.');} };
     window.addEventListener('rescue-map-auth-error', authError);
     setError(''); setReady(false);
@@ -54,9 +62,24 @@ export function LiveMap({ compact = false, points = [] }: { compact?: boolean; p
       valid.forEach(p => { bounds.extend(p); markers.push(new maps.Marker({ position: { lat:p.lat,lng:p.lng }, map, title:p.label, label:p.kind==='donor'?'D':'R' })); });
       if (valid.length > 1) map.fitBounds(bounds, 45);
       setReady(true);
+      if (route) {
+        // Directions are a best-effort overlay: the markers and the external
+        // navigation link already stand on their own if routing is unavailable.
+        const renderer = new maps.DirectionsRenderer({ map, suppressMarkers: true, preserveViewport: false, polylineOptions: { strokeWeight: 5, strokeOpacity: 0.85 } });
+        renderers.push(renderer);
+        void new maps.DirectionsService()
+          .route({ origin: route.origin, destination: route.destination, travelMode: maps.TravelMode.DRIVING })
+          .then(result => {
+            if (!active) return;
+            renderer.setDirections(result);
+            const leg = result.routes?.[0]?.legs?.[0];
+            onRouteSummary?.(leg?.distance && leg.duration ? { distance: leg.distance.text, duration: leg.duration.text } : null);
+          })
+          .catch(() => { if (active) onRouteSummary?.(null); });
+      }
     }).catch(err => { if(active) setError(err instanceof Error ? err.message : 'Map unavailable.'); });
-    return () => { active = false; window.removeEventListener('rescue-map-auth-error',authError); markers.forEach(marker => marker.setMap(null)); };
-  }, [key,channel,points,retry]);
+    return () => { active = false; window.removeEventListener('rescue-map-auth-error',authError); markers.forEach(marker => marker.setMap(null)); renderers.forEach(renderer => renderer.setMap(null)); };
+  }, [key,channel,points,retry,route,onRouteSummary]);
   return <div className={`relative overflow-hidden rounded-md border bg-muted ${compact?'h-64':'h-[420px]'}`}>
     <div ref={ref} className="absolute inset-0" aria-label="Rescue locations map"/>
     {!ready && <div className="absolute inset-0 grid place-items-center bg-map-pattern"><div className="max-w-xs rounded-md border bg-background/95 p-4 text-center text-sm"><MapPin className="mx-auto mb-2 size-5 text-primary"/><p role="status">{error || 'Loading rescue locations…'}</p>{error&&<Button variant="outline" size="sm" className="mt-3" onClick={()=>{mapLoader=undefined;document.getElementById('rescuerelay-google-maps')?.remove();setRetry(v=>v+1);}}><RefreshCw/> Retry map</Button>}</div></div>}
