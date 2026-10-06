@@ -298,18 +298,28 @@ export function PartnerCard({
   coordinator,
   busy,
   onVerify,
+  onOpen,
 }: {
   partner: FoodBank & { milesAway?: number };
   coordinator: boolean;
   busy: boolean;
   onVerify: (id: string, status: "verified" | "suspended") => void;
+  onOpen: (partner: FoodBank & { milesAway?: number }) => void;
 }) {
   const isRecipient = partner.type === "recipient";
   return (
-    <article className="flex flex-col rounded-md border bg-card p-5">
+    <article className="flex flex-col rounded-md border bg-card p-5 transition-colors hover:border-primary/40">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate text-lg font-semibold">{partner.name}</h3>
+          <h3 className="truncate text-lg font-semibold">
+            <button
+              type="button"
+              onClick={() => onOpen(partner)}
+              className="text-left hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              {partner.name}
+            </button>
+          </h3>
           <p className="mt-1 text-sm text-muted-foreground">
             {PARTNER_TYPE_LABELS[partner.type] ?? partner.type}
           </p>
@@ -383,9 +393,15 @@ export function PartnerCard({
           )}
         </div>
       )}
-      <p className="mt-4 flex items-center gap-1 text-xs font-medium text-primary">
-        View details <ArrowRight className="size-3" />
-      </p>
+      <Button
+        variant="link"
+        size="sm"
+        className="mt-4 h-auto justify-start self-start px-0"
+        onClick={() => onOpen(partner)}
+        aria-label={`View details for ${partner.name}`}
+      >
+        View details <ArrowRight />
+      </Button>
     </article>
   );
 }
@@ -839,6 +855,7 @@ export function PartnerDirectory({
               coordinator={coordinator}
               busy={busy}
               onVerify={onVerify}
+              onOpen={setSelected}
             />
           ))}
         </div>

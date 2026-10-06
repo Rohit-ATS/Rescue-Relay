@@ -1,0 +1,160 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import { PartnerDirectory } from "@/components/rescuerelay/workspace-cards";
+import type { FoodBank, PartnerSummary } from "@/lib/rescue-opportunities";
+
+const SUMMARY: PartnerSummary = {
+  totalRescues: 4,
+  completedRescues: 3,
+  poundsMoved: 540,
+  activeRescues: 1,
+};
+
+function partner(
+  over: Partial<FoodBank & { milesAway?: number }> = {},
+): FoodBank & { milesAway?: number } {
+  return {
+    id: "org-1",
+    name: "Riverbend Food Pantry",
+    type: "recipient",
+    address: "2220 E 17th St, Des Moines, IA",
+    latitude: 41.614357,
+    longitude: -93.591134,
+    coldStorage: true,
+    capacityLbs: 420,
+    householdsServed: 310,
+    acceptedCategories: ["prepared meals", "produce"],
+    verificationStatus: "verified",
+    phone: "515-555-0141",
+    contactEmail: "intake@riverbendpantry-qa.org",
+    website: "https://riverbendpantry-qa.org",
+    hoursNote: "Mon-Sat 8am-5pm",
+    ...over,
+  };
+}
+
+function renderDirectory(
+  partners = [partner()],
+  props: Partial<Parameters<typeof PartnerDirectory>[0]> = {},
+) {
+  const onVerify = vi.fn();
+  render(
+    <PartnerDirectory
+      partners={partners}
+      coordinator={false}
+      busy={false}
+      locationShared={false}
+      locating={false}
+      viewer={null}
+      summarize={() => SUMMARY}
+      onVerify={onVerify}
+      onRequestLocation={vi.fn()}
+      {...props}
+    />,
+  );
+  return { onVerify };
+}
+
+describe("Partner directory", () => {
+  it("opens a partner profile from the View details button", async () => {
+    const user = userEvent.setup();
+    renderDirectory();
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /view details for riverbend food pantry/i }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Riverbend Food Pantry")).toBeInTheDocument();
+  });
+
+  it("opens the same profile from the partner name", async () => {
+    const user = userEvent.setup();
+    renderDirectory();
+
+    await user.click(screen.getByRole("button", { name: "Riverbend Food Pantry" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("shows the contact details a donor needs to call ahead", async () => {
+    const user = userEvent.setup();
+    renderDirectory();
+    await user.click(screen.getByRole("button", { name: /view details for/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("link", { name: "515-555-0141" })).toHaveAttribute(
+      "href",
+      "tel:5155550141",
+    );
+    expect(
+      within(dialog).getByRole("link", { name: /intake@riverbendpantry-qa\.org/ }),
+    ).toHaveAttribute("href", "mailto:intake@riverbendpantry-qa.org");
+    expect(within(dialog).getByText("Mon-Sat 8am-5pm")).toBeInTheDocument();
+  });
+
+  it("says so plainly when contact columns have not been filled in", async () => {
+    const user = userEvent.setup();
+    renderDirectory([partner({ phone: "", contactEmail: "", hoursNote: "" })]);
+    await user.click(screen.getByRole("button", { name: /view details for/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getAllByText("Not provided")).toHaveLength(3);
+  });
+
+  it("reports the rescue record for the partner", async () => {
+    const user = userEvent.setup();
+    renderDirectory();
+    await user.click(screen.getByRole("button", { name: /view details for/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("540 lb")).toBeInTheDocument();
+  });
+
+  it("filters to donors without dropping them from the directory", async () => {
+    const user = userEvent.setup();
+    renderDirectory([
+      partner(),
+      partner({ id: "org-2", name: "Court Avenue Kitchen", type: "donor" }),
+    ]);
+
+    expect(screen.getByRole("button", { name: /all partners \(2\)/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /donors \(1\)/i }));
+
+    expect(screen.getByRole("button", { name: "Court Avenue Kitchen" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Riverbend Food Pantry" })).not.toBeInTheDocument();
+  });
+
+  it("searches by name", async () => {
+    const user = userEvent.setup();
+    renderDirectory([
+      partner(),
+      partner({ id: "org-2", name: "Court Avenue Kitchen", type: "donor" }),
+    ]);
+
+    await user.type(screen.getByLabelText(/search partners/i), "court");
+
+    expect(screen.getByRole("button", { name: "Court Avenue Kitchen" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Riverbend Food Pantry" })).not.toBeInTheDocument();
+  });
+
+  it("hides verification controls from non-coordinators", () => {
+    renderDirectory([partner({ verificationStatus: "pending" })], { coordinator: false });
+    expect(screen.queryByRole("button", { name: /^verify$/i })).not.toBeInTheDocument();
+  });
+
+  it("gives coordinators verification controls that do not open the profile", async () => {
+    const user = userEvent.setup();
+    const { onVerify } = renderDirectory([partner({ verificationStatus: "pending" })], {
+      coordinator: true,
+    });
+
+    await user.click(screen.getByRole("button", { name: /^verify$/i }));
+
+    expect(onVerify).toHaveBeenCalledWith("org-1", "verified");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
