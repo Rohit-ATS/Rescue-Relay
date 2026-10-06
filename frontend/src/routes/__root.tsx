@@ -9,9 +9,9 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import type { User } from '@supabase/supabase-js';
-import { AuthContext } from '@/lib/auth-context';
-import { LiveSyncProvider } from '@/lib/live-sync';
+import type { Session, User } from '@supabase/supabase-js';
+import { AuthContext, type AppRole, type UserProfile, type UserRoleRow } from '@/lib/auth-context';
+import { LiveSyncProvider, WORKSPACE_QUERY_KEY } from '@/lib/live-sync';
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -123,36 +123,156 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [roleRows, setRoleRows] = useState<UserRoleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [recovery, setRecovery] = useState(false);
 
+  const fetchProfileAndRoles = async (userId: string) => {
+    try {
+      const [profileRes, rolesRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+        supabase.from("user_roles").select("*").eq("user_id", userId),
+      ]);
+      setProfile(profileRes.data ?? null);
+      setRoleRows(rolesRes.data ?? []);
+    } catch (err) {
+      console.warn("[Auth] Failed to load user profile or roles:", err);
+    }
+  };
+
+  const refreshProfile = async () => {
+    const currentUserId = user?.id || session?.user?.id;
+    if (currentUserId) {
+      await fetchProfileAndRoles(currentUserId);
+    }
+  };
+
+  const signOut = async () => {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    sessionStorage.removeItem("rescue-recovery");
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+    setRoleRows([]);
+    setRecovery(false);
+    void router.invalidate();
+  };
+
   useEffect(() => {
     let active = true;
-    if (new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery') {
-      sessionStorage.setItem('rescue-recovery', 'true'); setRecovery(true);
+
+    if (typeof window !== "undefined") {
+      if (new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery") {
+        sessionStorage.setItem("rescue-recovery", "true");
+        setRecovery(true);
+      } else if (sessionStorage.getItem("rescue-recovery") === "true") {
+        setRecovery(true);
+      }
     }
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null); setLoading(false);
-      if (event === 'PASSWORD_RECOVERY') { sessionStorage.setItem('rescue-recovery', 'true'); setRecovery(true); }
-      if (event === 'SIGNED_OUT') { sessionStorage.removeItem('rescue-recovery'); setRecovery(false); }
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      if (!active) return;
+      setSession(currentSession ?? null);
+      setUser(currentSession?.user ?? null);
+      setLoading(false);
+
+      if (event === "PASSWORD_RECOVERY") {
+        sessionStorage.setItem("rescue-recovery", "true");
+        setRecovery(true);
+      } else if (event === "SIGNED_OUT") {
+        sessionStorage.removeItem("rescue-recovery");
+        setRecovery(false);
+        setProfile(null);
+        setRoleRows([]);
+        queryClient.clear();
+        void router.invalidate();
+        return;
+      }
+
+      if (currentSession?.user) {
+        void fetchProfileAndRoles(currentSession.user.id);
+        if (currentSession.access_token) {
+          void supabase.realtime.setAuth(currentSession.access_token);
+        }
+      } else {
+        setProfile(null);
+        setRoleRows([]);
+      }
+
+      if (event === "SIGNED_IN" || event === "USER_UPDATED" || event === "TOKEN_REFRESHED") {
+        void router.invalidate();
+        void queryClient.invalidateQueries({ queryKey: WORKSPACE_QUERY_KEY });
+      }
     });
-    void supabase.auth.getUser().then(({ data }) => { if (active) { setUser(data.user); setLoading(false); } });
-    return () => { active = false; data.subscription.unsubscribe(); };
+
+    void supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+      if (!active) return;
+      setSession(initialSession ?? null);
+      setUser(initialSession?.user ?? null);
+      setLoading(false);
+
+      if (initialSession?.user) {
+        await fetchProfileAndRoles(initialSession.user.id);
+        if (initialSession.access_token) {
+          void supabase.realtime.setAuth(initialSession.access_token);
+        }
+      }
+    });
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key?.includes("supabase.auth.token") || e.key?.includes("sb-") || e.key === "rescue-recovery") {
+        void supabase.auth.getSession().then(({ data: { session: s } }) => {
+          if (!active) return;
+          setSession(s ?? null);
+          setUser(s?.user ?? null);
+          if (s?.user) {
+            void fetchProfileAndRoles(s.user.id);
+          } else {
+            setProfile(null);
+            setRoleRows([]);
+          }
+          void router.invalidate();
+        });
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, [queryClient, router]);
+
+  const roles = roleRows.map((r) => r.role);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthContext.Provider value={{ user, loading, recovery }}>
-      <LiveSyncProvider userId={user?.id ?? null}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-      <Toaster richColors position="top-right" />
-      </LiveSyncProvider>
+      <AuthContext.Provider
+        value={{
+          user,
+          session,
+          profile,
+          roles,
+          roleRows,
+          loading,
+          recovery,
+          refreshProfile,
+          signOut,
+        }}
+      >
+        <LiveSyncProvider userId={user?.id ?? null}>
+          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+          <Outlet />
+          <Toaster richColors position="top-right" />
+        </LiveSyncProvider>
       </AuthContext.Provider>
     </QueryClientProvider>
   );
 }
+
