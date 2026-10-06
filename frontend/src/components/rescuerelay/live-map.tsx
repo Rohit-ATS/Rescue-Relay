@@ -61,19 +61,24 @@ const MARKER_SIZE = 40;
 const BASEMAP_STYLE = [
   { featureType: "poi", stylers: [{ visibility: "off" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#f4f4ef" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#d9e4e6" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ visibility: "off" }] },
-  { featureType: "road.highway", elementType: "geometry.fill", stylers: [{ color: "#e6e3d8" }] },
-  { featureType: "road.arterial", elementType: "geometry.fill", stylers: [{ color: "#efece2" }] },
-  { featureType: "road.local", elementType: "geometry.fill", stylers: [{ color: "#f7f5ee" }] },
+  { featureType: "road", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  // Land sits back; roads stay near-white with a defined edge so the network still
+  // reads. An earlier pass tinted roads and land within a few percent of each other,
+  // which flattened the whole map into one blank field.
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#eceade" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#bed4da" }] },
+  { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#dcd8c6" }] },
+  { featureType: "road.highway", elementType: "geometry.fill", stylers: [{ color: "#fdf6dd" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#e4ca84" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#d9e4cd" }] },
   {
     featureType: "administrative",
     elementType: "labels.text.fill",
-    stylers: [{ color: "#6b6f66" }],
+    stylers: [{ color: "#4a4f46" }],
   },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#8a8d84" }] },
-  { featureType: "road", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#6f736a" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#6b8b93" }] },
 ];
 
 /**

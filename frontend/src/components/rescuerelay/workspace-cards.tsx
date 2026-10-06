@@ -34,16 +34,7 @@ import {
 } from "@/lib/geo";
 import type { RescueActivity } from "@/lib/rescue-activity";
 import type { FoodBank, Opportunity, PartnerSummary } from "@/lib/rescue-opportunities";
-
-/** Shared timestamp format, matching the rest of the workspace. */
-function date(value: string) {
-  return new Date(value).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+import { formatClock, formatMoment as date } from "@/lib/format";
 
 /** Shown when a list has nothing in it yet. */
 export function Empty({ title, copy }: { title: string; copy: string }) {
