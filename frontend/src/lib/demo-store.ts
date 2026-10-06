@@ -507,3 +507,4 @@ export function getInitialEvents(now = Date.now()): RescueEvent[] {
     },
   ];
 }
+

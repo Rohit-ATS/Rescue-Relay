@@ -366,3 +366,4 @@ export function resetDemoWorkspace(): void {
   getStoredWorkspace();
   window.dispatchEvent(new CustomEvent('rescuerelay:workspace-updated'));
 }
+
