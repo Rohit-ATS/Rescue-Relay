@@ -41,3 +41,4 @@ describe('AiWorkflows Component', () => {
     expect(screen.getByText('Sister Pantry & Shelter Dispatcher')).toBeInTheDocument();
   });
 });
+
