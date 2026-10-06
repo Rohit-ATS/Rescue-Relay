@@ -40,5 +40,34 @@ describe('AiWorkflows Component', () => {
     expect(screen.getByText('Urgent Surplus Alert Bot')).toBeInTheDocument();
     expect(screen.getByText('Sister Pantry & Shelter Dispatcher')).toBeInTheDocument();
   });
+
+  it('renders without error even when localStorage contains JSON serialized agents with missing icon functions', () => {
+    localStorage.setItem(
+      'rr_ai_agents',
+      JSON.stringify([
+        {
+          id: 'community-alert',
+          name: 'Community Food Alert Agent',
+          role: 'Public distribution announcements',
+          description: 'Custom description',
+          enabled: true,
+          tone: 'community',
+          channels: ['Google Maps'],
+          autoPublish: false,
+          signoff: 'Test signoff',
+        },
+      ])
+    );
+
+    render(<AiWorkflows data={mockData} role="coordinator" />);
+    expect(screen.getByText('Community Food Alert Agent')).toBeInTheDocument();
+    localStorage.removeItem('rr_ai_agents');
+  });
+
+  it('handles empty donations gracefully without crashing', () => {
+    const emptyData = { donations: [], organizations: [], roles: [{ role: 'donor' }] };
+    render(<AiWorkflows data={emptyData} role="donor" />);
+    expect(screen.getByText('AI Social & Broadcast Workflows')).toBeInTheDocument();
+  });
 });
 

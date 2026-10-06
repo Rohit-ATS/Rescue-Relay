@@ -111,6 +111,18 @@ interface BroadcastPost {
   externalUrl?: string;
 }
 
+const AGENT_ICONS: Record<string, LucideIcon> = {
+  'community-alert': Bell,
+  'perishable-dispatch': Zap,
+  'partner-relay': Users,
+  'donor-gratitude': HeartHandshake,
+  'community-inbox': Inbox,
+};
+
+export const getAgentIcon = (id: string, fallback?: LucideIcon): LucideIcon => {
+  return AGENT_ICONS[id] || (typeof fallback === 'function' ? fallback : Bot);
+};
+
 const DEFAULT_AGENTS: AgentConfig[] = [
   {
     id: 'community-alert',
@@ -182,10 +194,28 @@ const DEFAULT_CHANNELS: ChannelConfig[] = [
 ];
 
 export function AiWorkflows({ data, role }: AiWorkflowsProps) {
+  const donations = data?.donations ?? [];
+  const organizations = data?.organizations ?? [];
+
   const [agents, setAgents] = useState<AgentConfig[]>(() => {
     try {
       const saved = localStorage.getItem('rr_ai_agents');
-      return saved ? JSON.parse(saved) : DEFAULT_AGENTS;
+      if (!saved) return DEFAULT_AGENTS;
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_AGENTS;
+      return DEFAULT_AGENTS.map((def) => {
+        const match = parsed.find((p: any) => p && p.id === def.id);
+        if (!match) return def;
+        return {
+          ...def,
+          enabled: typeof match.enabled === 'boolean' ? match.enabled : def.enabled,
+          tone: match.tone || def.tone,
+          channels: Array.isArray(match.channels) ? match.channels : def.channels,
+          autoPublish: typeof match.autoPublish === 'boolean' ? match.autoPublish : def.autoPublish,
+          signoff: typeof match.signoff === 'string' ? match.signoff : def.signoff,
+          icon: def.icon,
+        };
+      });
     } catch {
       return DEFAULT_AGENTS;
     }
@@ -194,17 +224,26 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
   const [channels, setChannels] = useState<ChannelConfig[]>(() => {
     try {
       const saved = localStorage.getItem('rr_ai_channels');
-      return saved ? JSON.parse(saved) : DEFAULT_CHANNELS;
+      if (!saved) return DEFAULT_CHANNELS;
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_CHANNELS;
+      return DEFAULT_CHANNELS.map((def) => {
+        const match = parsed.find((p: any) => p && p.id === def.id);
+        return match ? { ...def, ...match } : def;
+      });
     } catch {
       return DEFAULT_CHANNELS;
     }
   });
 
   const [posts, setPosts] = useState<BroadcastPost[]>(() => {
-    const saved = localStorage.getItem('rr_ai_posts');
-    if (saved) {
-      try { return JSON.parse(saved); } catch {}
-    }
+    try {
+      const saved = localStorage.getItem('rr_ai_posts');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    } catch {}
     return [
       {
         id: 'post-1',
@@ -234,7 +273,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
   });
 
   // Generator state
-  const [selectedRescueId, setSelectedRescueId] = useState<string>(data.donations[0]?.id || '');
+  const [selectedRescueId, setSelectedRescueId] = useState<string>(donations[0]?.id || '');
   const [selectedAgentId, setSelectedAgentId] = useState<string>('community-alert');
   const [targetPlatform, setTargetPlatform] = useState<string>('google_business');
   const [customPrompt, setCustomPrompt] = useState<string>('');
@@ -250,21 +289,28 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
 
   // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('rr_ai_agents', JSON.stringify(agents));
+    try {
+      const serializable = agents.map(({ icon, ...rest }) => rest);
+      localStorage.setItem('rr_ai_agents', JSON.stringify(serializable));
+    } catch {}
   }, [agents]);
 
   useEffect(() => {
-    localStorage.setItem('rr_ai_channels', JSON.stringify(channels));
+    try {
+      localStorage.setItem('rr_ai_channels', JSON.stringify(channels));
+    } catch {}
   }, [channels]);
 
   useEffect(() => {
-    localStorage.setItem('rr_ai_posts', JSON.stringify(posts));
+    try {
+      localStorage.setItem('rr_ai_posts', JSON.stringify(posts));
+    } catch {}
   }, [posts]);
 
   // Selected rescue object
   const activeRescue = useMemo(() => {
-    return data.donations.find((d) => d.id === selectedRescueId) || data.donations[0];
-  }, [data.donations, selectedRescueId]);
+    return donations.find((d) => d.id === selectedRescueId) || donations[0];
+  }, [donations, selectedRescueId]);
 
   const activeAgent = useMemo(() => {
     return agents.find((a) => a.id === selectedAgentId) || agents[0];
@@ -307,8 +353,8 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
       const pounds = Number(activeRescue.pounds);
       const meals = Math.round(pounds / 1.2);
       const deadlineDate = new Date(activeRescue.pickup_deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const pantryName = data.profile?.organization_id 
-        ? data.organizations.find(o => o.id === data.profile?.organization_id)?.name || 'Community Food Pantry'
+      const pantryName = data?.profile?.organization_id 
+        ? organizations.find(o => o.id === data.profile?.organization_id)?.name || 'Community Food Pantry'
         : 'Hope Community Pantry';
 
       let text = '';
@@ -514,7 +560,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
 
           <div className="grid gap-4 md:grid-cols-2">
             {agents.map((agent) => {
-              const Icon = agent.icon;
+              const Icon = getAgentIcon(agent.id, agent.icon);
               return (
                 <article
                   key={agent.id}
@@ -667,7 +713,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
                     <SelectValue placeholder="Choose a rescue..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {data.donations.map((d) => (
+                    {donations.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         {d.title} ({Number(d.pounds)} lb · {d.category})
                       </SelectItem>
