@@ -92,3 +92,4 @@ describe("Realtime Supabase Auth state synchronization", () => {
     expect(result.current.loading).toBe(false);
   });
 });
+
