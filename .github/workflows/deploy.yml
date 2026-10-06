@@ -30,19 +30,38 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Configure GitHub Pages
         id: pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Determine Base Path
+        id: base-path
+        run: |
+          BASE="${{ steps.pages.outputs.base_path }}"
+          if [ -z "$BASE" ]; then
+            echo "base_path=/" >> $GITHUB_OUTPUT
+          else
+            [[ "$BASE" != /* ]] && BASE="/$BASE"
+            [[ "$BASE" != */ ]] && BASE="$BASE/"
+            echo "base_path=$BASE" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install dependencies
-        run: |
-          cd frontend
-          npm install
+        working-directory: frontend
+        run: bun install --frozen-lockfile
 
       - name: Build static site for GitHub Pages
+        working-directory: frontend
         env:
-          BASE_PATH: ${{ steps.pages.outputs.base_path != '' && format('{0}/', steps.pages.outputs.base_path) || '/Rescue-Relay/' }}
-          VITE_BASE_PATH: ${{ steps.pages.outputs.base_path != '' && format('{0}/', steps.pages.outputs.base_path) || '/Rescue-Relay/' }}
+          BASE_PATH: ${{ steps.base-path.outputs.base_path }}
+          VITE_BASE_PATH: ${{ steps.base-path.outputs.base_path }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://rwvjkzpugmlrmcdgltwu.supabase.co' }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_dxH-ZdsppAxtwjA1A9NBAQ_ofTIuX3m' }}
           VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID || 'rwvjkzpugmlrmcdgltwu' }}
@@ -51,8 +70,7 @@ jobs:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID || 'rwvjkzpugmlrmcdgltwu' }}
           VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY: ${{ secrets.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY || 'AIzaSyBmvJph4LmrbtW7skeczzpBIyb9WWzFKo4' }}
           VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID: ${{ secrets.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID || '5a1a33b487a7d37b0e3340bb91e22012' }}
-        run: |
-          npm run build:pages
+        run: bun run build:pages
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -62,4 +80,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
