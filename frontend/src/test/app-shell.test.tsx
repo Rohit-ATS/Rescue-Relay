@@ -141,3 +141,56 @@ describe("AppShell header", () => {
     expect(screen.getByRole("menuitem", { name: /sign out/i })).toBeInTheDocument();
   });
 });
+
+describe("AppShell section search", () => {
+  it("opens the palette from the header control", async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(screen.getByRole("button", { name: /search sections/i }));
+
+    expect(await screen.findByPlaceholderText(/search sections/i)).toBeInTheDocument();
+  });
+
+  it("finds a section by its description, not just its name", async () => {
+    const user = userEvent.setup();
+    const { onView } = renderShell();
+    await user.click(screen.getByRole("button", { name: /search sections/i }));
+
+    // "food bank" never appears in the label "Partners".
+    await user.type(await screen.findByPlaceholderText(/search sections/i), "food bank");
+    await user.click(await screen.findByRole("option", { name: /partners/i }));
+
+    expect(onView).toHaveBeenCalledWith("partners");
+  });
+
+  it("navigates to the chosen section and closes", async () => {
+    const user = userEvent.setup();
+    const { onView } = renderShell();
+    await user.click(screen.getByRole("button", { name: /search sections/i }));
+    await user.click(await screen.findByRole("option", { name: /impact/i }));
+
+    expect(onView).toHaveBeenCalledWith("impact");
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText(/search sections/i)).not.toBeInTheDocument(),
+    );
+  });
+
+  it("says so when nothing matches", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole("button", { name: /search sections/i }));
+    await user.type(await screen.findByPlaceholderText(/search sections/i), "zzzzzz");
+
+    expect(await screen.findByText(/no section matches that/i)).toBeInTheDocument();
+  });
+
+  it("opens on the keyboard shortcut", async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.keyboard("{Meta>}k{/Meta}");
+
+    expect(await screen.findByPlaceholderText(/search sections/i)).toBeInTheDocument();
+  });
+});

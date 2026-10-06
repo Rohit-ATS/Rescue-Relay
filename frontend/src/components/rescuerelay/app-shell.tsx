@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  Search,
   Bot,
   LayoutDashboard,
   Leaf,
@@ -32,6 +33,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 type NavItem = { icon: LucideIcon; label: string; value: string; hint: string };
 type NavGroup = { heading: string; items: NavItem[] };
@@ -105,6 +114,75 @@ function initials(name: string) {
   const first = parts[0]?.[0] ?? "";
   const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
   return (first + last).toUpperCase() || "RR";
+}
+
+/**
+ * Jump to any section by name.
+ *
+ * The palette searches each section's description as well as its label, so "food bank"
+ * finds Partners and "handoff" finds Driver routes — a volunteer should not have to
+ * know what a section is called to reach it.
+ */
+function SectionSearch({ onView }: { onView: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "k" || !(event.metaKey || event.ctrlKey)) return;
+      event.preventDefault();
+      setOpen((previous) => !previous);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  function choose(value: string) {
+    setOpen(false);
+    onView(value);
+  }
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        onClick={() => setOpen(true)}
+        aria-label="Search sections"
+        aria-keyshortcuts="Meta+K Control+K"
+        className="h-9 gap-2 text-muted-foreground sm:w-64 sm:justify-start sm:px-3"
+      >
+        <Search className="size-4 shrink-0" />
+        <span className="hidden sm:inline">Search sections…</span>
+        <kbd className="ml-auto hidden rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] sm:inline">
+          ⌘K
+        </kbd>
+      </Button>
+
+      <CommandDialog open={open} onOpenChange={setOpen}>
+        <CommandInput placeholder="Search sections…" />
+        <CommandList>
+          <CommandEmpty>No section matches that.</CommandEmpty>
+          {NAV_GROUPS.map((group) => (
+            <CommandGroup key={group.heading} heading={group.heading}>
+              {group.items.map((item) => (
+                <CommandItem
+                  key={item.value}
+                  // cmdk filters on this string, so the description is searchable too.
+                  value={`${item.label} ${item.hint}`}
+                  onSelect={() => choose(item.value)}
+                >
+                  <item.icon className="size-4 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-medium">{item.label}</p>
+                    <p className="truncate text-xs text-muted-foreground">{item.hint}</p>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ))}
+        </CommandList>
+      </CommandDialog>
+    </>
+  );
 }
 
 /** The dot beside the workspace title, reporting what the realtime channel is doing. */
@@ -369,6 +447,8 @@ export function AppShell({
               {VIEW_SUBTITLES[view] ?? "Des Moines rescue network"}
             </p>
           </div>
+
+          <SectionSearch onView={selectView} />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
