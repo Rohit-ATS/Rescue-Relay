@@ -23,8 +23,13 @@ function AuthPage() {
   useEffect(() => { if (!loading && user && !recovery) void navigate({to:'/dashboard',replace:true}); }, [user,loading,recovery,navigate]);
   async function submit(event: React.FormEvent){event.preventDefault();setBusy(true);setMessage('');
     try {
-    if(mode==='forgot'){const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:`${window.location.origin}/reset-password`});setMessage(error?.message??'Check your email for a secure reset link.');setBusy(false);return;}
-    const result=mode==='signup'?await supabase.auth.signUp({email:email.trim(),password,options:{emailRedirectTo:`${window.location.origin}/auth`}}):await supabase.auth.signInWithPassword({email:email.trim(),password});
+    const origin = window.location.origin;
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const authRedirect = `${origin}${base}/auth`;
+    const resetRedirect = `${origin}${base}/reset-password`;
+
+    if(mode==='forgot'){const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:resetRedirect});setMessage(error?.message??'Check your email for a secure reset link.');setBusy(false);return;}
+    const result=mode==='signup'?await supabase.auth.signUp({email:email.trim(),password,options:{emailRedirectTo:authRedirect}}):await supabase.auth.signInWithPassword({email:email.trim(),password});
     if(result.error){
       // The project requires email confirmation: say so plainly and offer the resend instead of a dead end.
       if(result.error.code==='email_not_confirmed'){setPending(email.trim());setMessage('This account still needs email confirmation before you can sign in.');}
@@ -34,8 +39,8 @@ function AuthPage() {
     else {setPending('');await navigate({to:'/dashboard',replace:true});}
     } catch(err) { setMessage(err instanceof Error ? err.message : 'Unable to connect. Please try again.'); } finally { setBusy(false); }
   }
-  async function resend(){setBusy(true);try{const {error}=await supabase.auth.resend({type:'signup',email:pending,options:{emailRedirectTo:`${window.location.origin}/auth`}});setMessage(error?error.message:`Confirmation email re-sent to ${pending}. It can take a minute to arrive.`);}catch(err){setMessage(err instanceof Error?err.message:'Could not resend the confirmation email.');}finally{setBusy(false);}}
-  async function google(){setBusy(true);setMessage('');try{const result=await lovable.auth.signInWithOAuth('google',{redirect_uri:window.location.origin});if(result.error)throw result.error;if(!result.redirected) await navigate({to:'/dashboard',replace:true});}catch(err){setMessage(err instanceof Error?err.message:'Google sign-in failed. Try again.');}finally{setBusy(false);}}
+  async function resend(){setBusy(true);try{const origin = window.location.origin; const base = import.meta.env.BASE_URL.replace(/\/$/, ""); const {error}=await supabase.auth.resend({type:'signup',email:pending,options:{emailRedirectTo:`${origin}${base}/auth`}});setMessage(error?error.message:`Confirmation email re-sent to ${pending}. It can take a minute to arrive.`);}catch(err){setMessage(err instanceof Error?err.message:'Could not resend the confirmation email.');}finally{setBusy(false);}}
+  async function google(){setBusy(true);setMessage('');try{const origin = window.location.origin; const base = import.meta.env.BASE_URL.replace(/\/$/, ""); const result=await lovable.auth.signInWithOAuth('google',{redirect_uri:`${origin}${base}`});if(result.error)throw result.error;if(!result.redirected) await navigate({to:'/dashboard',replace:true});}catch(err){setMessage(err instanceof Error?err.message:'Google sign-in failed. Try again.');}finally{setBusy(false);}}
   return <div className="min-h-screen bg-muted/40 md:grid md:grid-cols-[1fr_1.05fr]">
     <div className="flex min-h-screen flex-col px-5 py-6 md:px-12"><div className="flex items-center justify-between"><Brand/><Button asChild variant="ghost" size="sm"><Link to="/"><ArrowLeft/> Home</Link></Button></div>
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-12"><p className="text-sm font-bold uppercase text-primary">Partner network</p><h1 className="mt-3 text-4xl font-semibold">{mode==='signin'?'Welcome back':mode==='signup'?'Join RescueRelay':'Reset your password'}</h1><p className="mt-3 text-muted-foreground">{mode==='signup'?'Create a verified partner profile in a few steps.':'Coordinate safe food rescue from one secure workspace.'}</p>
