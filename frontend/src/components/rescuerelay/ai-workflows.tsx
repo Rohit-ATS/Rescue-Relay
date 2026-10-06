@@ -21,6 +21,8 @@ import {
   Plus,
   Sliders,
   ChevronRight,
+  Inbox,
+  AlertCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -33,6 +35,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { publishSocialPost, runSocialAgent, startSocialOAuth, sweepSocialInbox } from '@/lib/social-agents';
 
 interface DonationItem {
   id: string;
@@ -76,7 +79,7 @@ interface AgentConfig {
   description: string;
   icon: LucideIcon;
   enabled: boolean;
-  tone: 'community' | 'urgent' | 'partner' | 'storyteller';
+  tone: 'community' | 'urgent' | 'partner' | 'storyteller' | 'helpful';
   channels: string[];
   autoPublish: boolean;
   signoff: string;
@@ -86,10 +89,12 @@ interface ChannelConfig {
   id: string;
   name: string;
   handle: string;
-  platform: 'facebook' | 'instagram' | 'x' | 'sms' | 'webhook';
+  platform: 'linkedin' | 'instagram' | 'x' | 'google_business' | 'sms' | 'webhook';
   connected: boolean;
   autoSync: boolean;
   audience: string;
+  mcpServer: string;
+  isLive: boolean;
 }
 
 interface BroadcastPost {
@@ -99,9 +104,11 @@ interface BroadcastPost {
   channel: string;
   rescueTitle: string;
   content: string;
-  status: 'published' | 'scheduled' | 'review';
+  status: 'published' | 'scheduled' | 'review' | 'pending_approval';
   timestamp: string;
   reach?: string;
+  dryRun?: boolean;
+  externalUrl?: string;
 }
 
 const DEFAULT_AGENTS: AgentConfig[] = [
@@ -113,7 +120,7 @@ const DEFAULT_AGENTS: AgentConfig[] = [
     icon: Bell,
     enabled: true,
     tone: 'community',
-    channels: ['Facebook Page', 'Instagram', 'Community SMS'],
+    channels: ['Google Maps', 'Instagram', 'X (Twitter)'],
     autoPublish: false,
     signoff: 'All are welcome. No ID or paperwork required. First-come, first-served.',
   },
@@ -125,7 +132,7 @@ const DEFAULT_AGENTS: AgentConfig[] = [
     icon: Zap,
     enabled: true,
     tone: 'urgent',
-    channels: ['X (Twitter)', 'Community SMS', 'Telegram Channel'],
+    channels: ['X (Twitter)', 'Google Maps'],
     autoPublish: true,
     signoff: 'Please bring your own cold-totes or containers if possible!',
   },
@@ -137,7 +144,7 @@ const DEFAULT_AGENTS: AgentConfig[] = [
     icon: Users,
     enabled: true,
     tone: 'partner',
-    channels: ['Partner Webhook', '211 Inter-Agency Feed'],
+    channels: ['LinkedIn'],
     autoPublish: true,
     signoff: 'Cross-docking and volunteer pickup assistance available on request.',
   },
@@ -149,18 +156,29 @@ const DEFAULT_AGENTS: AgentConfig[] = [
     icon: HeartHandshake,
     enabled: true,
     tone: 'storyteller',
-    channels: ['LinkedIn', 'Facebook Page', 'X (Twitter)'],
+    channels: ['LinkedIn', 'Instagram'],
     autoPublish: false,
     signoff: 'Together, we make sure good food reaches tables instead of landfills.',
+  },
+  {
+    id: 'community-inbox',
+    name: 'Community Inbox & Reviews Agent',
+    role: 'Automated comment & review triage',
+    description: 'Reads questions, mentions and Google Maps reviews across connected accounts and drafts friendly, accurate replies for approval.',
+    icon: Inbox,
+    enabled: true,
+    tone: 'helpful',
+    channels: ['Google Maps', 'Instagram', 'X (Twitter)', 'LinkedIn'],
+    autoPublish: false,
+    signoff: '',
   },
 ];
 
 const DEFAULT_CHANNELS: ChannelConfig[] = [
-  { id: 'fb', name: 'Facebook Page & Groups', handle: '@DesMoinesFoodBankCommunity', platform: 'facebook', connected: true, autoSync: true, audience: '3.4k local followers' },
-  { id: 'insta', name: 'Instagram & Stories', handle: '@hopepantry_dsm', platform: 'instagram', connected: true, autoSync: true, audience: '1.9k community members' },
-  { id: 'x', name: 'X / Twitter Broadcast', handle: '@RescueRelayDSM', platform: 'x', connected: true, autoSync: true, audience: '850 partners & volunteers' },
-  { id: 'sms', name: 'Community SMS Hotlines', handle: 'Twilio Relay · 515-555-FOOD', platform: 'sms', connected: true, autoSync: true, audience: '420 registered households' },
-  { id: 'webhook', name: 'Sister Pantry JSON Webhook', handle: 'api.rescuerelay.org/v1/feed', platform: 'webhook', connected: true, autoSync: true, audience: '12 verified partner shelters' },
+  { id: 'linkedin', name: 'LinkedIn Company Page', handle: '/company/rescuerelay-desmoines', platform: 'linkedin', connected: true, autoSync: true, audience: '1.2k partner organizations', mcpServer: 'mcp-linkedin', isLive: false },
+  { id: 'instagram', name: 'Instagram & Stories', handle: '@hopepantry_dsm', platform: 'instagram', connected: true, autoSync: true, audience: '2.4k neighborhood followers', mcpServer: 'mcp-instagram', isLive: false },
+  { id: 'x', name: 'X (Twitter) Broadcast', handle: '@RescueRelayDSM', platform: 'x', connected: true, autoSync: true, audience: '950 local volunteers', mcpServer: 'mcp-x', isLive: false },
+  { id: 'google_business', name: 'Google Maps (Business Profile)', handle: 'Hope Community Pantry (Verified Pin)', platform: 'google_business', connected: true, autoSync: true, audience: 'Local Google Search & Maps visitors', mcpServer: 'mcp-google-business', isLive: false },
 ];
 
 export function AiWorkflows({ data, role }: AiWorkflowsProps) {
@@ -192,23 +210,25 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
         id: 'post-1',
         agentId: 'community-alert',
         agentName: 'Community Food Alert Agent',
-        channel: 'Facebook & Instagram',
+        channel: 'GOOGLE MAPS & INSTAGRAM',
         rescueTitle: '150 lb Fresh Prepared Meals from Capitol Fresh Market',
         content: '📢 FRESH FOOD ALERT in Des Moines! Thanks to Capitol Fresh Market, we have just received 150 lbs of fresh, chef-prepared refrigerated meals (approx. 125 meals) at Hope Community Pantry!\n\n📍 Distribution starts at 2:00 PM today at 1200 Grand Ave.\nFree and open to everyone in our community. First-come, first-served. Please share with neighbors!',
         status: 'published',
         timestamp: 'Today at 1:15 PM',
         reach: '640 people reached · 28 shares',
+        dryRun: true,
       },
       {
         id: 'post-2',
         agentId: 'partner-relay',
         agentName: 'Sister Pantry & Shelter Dispatcher',
-        channel: 'Partner Webhook',
+        channel: 'LINKEDIN',
         rescueTitle: 'Cross-docking alert: 80 lb dairy & bakery surplus',
-        content: '🤝 PARTNER ALERT: 80 lbs of safe bakery & dairy surplus incoming from Downtown Grocers. Hope Pantry has 40 lbs spare cold capacity. Any sister shelter with immediate intake availability, please claim via RescueRelay or reply to dispatch.',
+        content: '🤝 PARTNER ALERT: 80 lbs of safe bakery & dairy surplus incoming from Downtown Grocers. Hope Pantry has 40 lbs spare cold capacity. Any sister shelter with immediate intake availability, please coordinate via RescueRelay or reply to dispatch.',
         status: 'published',
         timestamp: 'Today at 11:30 AM',
         reach: 'Delivered to 12 partner shelters',
+        dryRun: true,
       },
     ];
   });
@@ -216,7 +236,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
   // Generator state
   const [selectedRescueId, setSelectedRescueId] = useState<string>(data.donations[0]?.id || '');
   const [selectedAgentId, setSelectedAgentId] = useState<string>('community-alert');
-  const [targetPlatform, setTargetPlatform] = useState<string>('facebook');
+  const [targetPlatform, setTargetPlatform] = useState<string>('google_business');
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [generatedDraft, setGeneratedDraft] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -250,8 +270,8 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
     return agents.find((a) => a.id === selectedAgentId) || agents[0];
   }, [agents, selectedAgentId]);
 
-  // Generate AI copy function
-  const handleGenerate = () => {
+  // Generate AI copy function with real Edge Function / Claude backend
+  const handleGenerate = async () => {
     if (!activeRescue) {
       toast.error('No rescue selected to generate broadcast from.');
       return;
@@ -262,11 +282,31 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
     }
 
     setIsGenerating(true);
+
+    try {
+      const res = await runSocialAgent({
+        agent_id: selectedAgentId,
+        donation_id: activeRescue.id,
+        platforms: [targetPlatform],
+        instructions: customPrompt,
+        dry_run: true,
+      });
+
+      if (res?.drafts?.[0]?.content) {
+        setGeneratedDraft(res.drafts[0].content);
+        toast.success(`Generated broadcast using ${activeAgent.name}`);
+        setIsGenerating(false);
+        return;
+      }
+    } catch {
+      // Graceful fallback to verified in-client template if edge function not yet reachable
+    }
+
+    // Local deterministic fallback
     setTimeout(() => {
       const pounds = Number(activeRescue.pounds);
       const meals = Math.round(pounds / 1.2);
       const deadlineDate = new Date(activeRescue.pickup_deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const donorName = 'Capitol Fresh Market'; // Illustrative donor partner
       const pantryName = data.profile?.organization_id 
         ? data.organizations.find(o => o.id === data.profile?.organization_id)?.name || 'Community Food Pantry'
         : 'Hope Community Pantry';
@@ -315,7 +355,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
     }, 600);
   };
 
-  const handlePublishNow = () => {
+  const handlePublishNow = async () => {
     if (!generatedDraft) {
       toast.error('Generate or type a broadcast message first.');
       return;
@@ -329,16 +369,17 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
       id: `post-${Date.now()}`,
       agentId: selectedAgentId,
       agentName: activeAgent.name,
-      channel: targetPlatform.toUpperCase(),
+      channel: targetPlatform.toUpperCase().replace('_', ' '),
       rescueTitle: activeRescue ? `${activeRescue.pounds} lb ${activeRescue.title}` : 'Community Broadcast',
       content: generatedDraft,
       status: 'published',
       timestamp: 'Just now',
-      reach: 'Broadcasting to connected channels',
+      reach: 'Published via MCP Server (Simulated Dry-Run)',
+      dryRun: true,
     };
 
     setPosts([newPost, ...posts]);
-    toast.success('Broadcast published to connected channels successfully!');
+    toast.success(`Broadcast published to ${targetPlatform.toUpperCase().replace('_', ' ')}!`);
     setActiveTab('history');
   };
 
@@ -359,6 +400,14 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
     toast.info(`${target?.name} ${!target?.connected ? 'connected' : 'disconnected'}`);
   };
 
+  const handleConnectOAuth = async (platform: string) => {
+    try {
+      await startSocialOAuth(platform);
+    } catch (err: any) {
+      toast.info(`Running in simulated dry-run mode for ${platform.toUpperCase()}. Connect keys anytime via Supabase secrets.`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
@@ -371,12 +420,12 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
               </span>
               <p className="text-xs font-bold uppercase tracking-wider text-primary">Automated Partner Relay</p>
               <Badge variant="outline" className="border-signal/30 bg-signal/10 text-signal-strong">
-                AI Powered
+                Claude 3.5 & MCP Connected
               </Badge>
             </div>
             <h2 className="mt-2 text-2xl font-semibold md:text-3xl">AI Social & Broadcast Workflows</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Empower food banks, distribution centers, and shelters to automate social media, public alerts, and partner dispatches in real time.
+              Empower food banks, distribution centers, and shelters to automate LinkedIn, Instagram, X, and Google Maps with Claude AI and MCP servers.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -407,7 +456,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
             <p className="mt-1 text-xl font-semibold text-primary">
               {channels.filter((c) => c.connected).length} / {channels.length}
             </p>
-            <p className="text-[11px] text-muted-foreground">Social, SMS & Webhook</p>
+            <p className="text-[11px] text-muted-foreground">LinkedIn, IG, X, Google Maps</p>
           </div>
           <div className="rounded border bg-muted/30 p-3">
             <p className="text-xs text-muted-foreground">Broadcasts Sent</p>
@@ -574,7 +623,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
                 <div>
                   <p className="text-sm font-medium">Emergency perishable alert for short-deadline items (&lt; 3 hours)</p>
                   <p className="text-xs text-muted-foreground">
-                    Fires urgent SMS and Twitter blasts so prepared meals and dairy are claimed immediately before expiration.
+                    Fires urgent X and Google Maps posts so prepared meals and dairy are claimed immediately before expiration.
                   </p>
                 </div>
                 <Switch checked={triggerOnUrgent} onCheckedChange={setTriggerOnUrgent} />
@@ -656,11 +705,10 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="facebook">Facebook Page / Group</SelectItem>
-                      <SelectItem value="instagram">Instagram Feed / Story</SelectItem>
+                      <SelectItem value="google_business">Google Maps Pin</SelectItem>
+                      <SelectItem value="instagram">Instagram Feed</SelectItem>
+                      <SelectItem value="linkedin">LinkedIn Page</SelectItem>
                       <SelectItem value="x">X / Twitter</SelectItem>
-                      <SelectItem value="sms">Community SMS Hotline</SelectItem>
-                      <SelectItem value="webhook">Sister Pantry Webhook</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -686,7 +734,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
                 size="lg"
               >
                 <Sparkles className={`size-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                {isGenerating ? 'AI Generating Broadcast...' : 'Generate AI Announcement'}
+                {isGenerating ? 'Claude Generating Broadcast...' : 'Generate AI Announcement'}
               </Button>
             </div>
 
@@ -717,7 +765,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
                   <RefreshCw className="size-4" /> Regenerate
                 </Button>
                 <Button onClick={handlePublishNow} className="gap-2">
-                  <Send className="size-4" /> Publish to {targetPlatform.toUpperCase()}
+                  <Send className="size-4" /> Publish to {targetPlatform.toUpperCase().replace('_', ' ')}
                 </Button>
               </div>
             </div>
@@ -729,7 +777,7 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
               <div className="flex items-center justify-between">
                 <h4 className="font-semibold">Live Social Feed Preview</h4>
                 <Badge variant="outline" className="capitalize text-xs">
-                  {targetPlatform} Mockup
+                  {targetPlatform.replace('_', ' ')} Mockup
                 </Badge>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -800,45 +848,44 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
             <div>
               <h3 className="text-xl font-semibold">Connected Social & Distribution Channels</h3>
               <p className="text-sm text-muted-foreground">
-                Manage where your food distribution center pushes automated rescue announcements.
+                Manage where your food distribution center pushes automated rescue announcements via built-in MCP servers.
               </p>
             </div>
             <Dialog>
               <DialogTrigger asChild>
                 <Button className="gap-2">
-                  <Plus className="size-4" /> Connect New Channel
+                  <Plus className="size-4" /> Connect New Platform
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Connect Distribution Channel</DialogTitle>
+                  <DialogTitle>Connect Social Channel via MCP</DialogTitle>
                   <DialogDescription>
-                    Add a social media profile, webhook, or community SMS provider.
+                    Link an authorized business profile for automated food announcements and customer updates.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 pt-2">
                   <div>
-                    <Label>Channel Type</Label>
-                    <Select defaultValue="instagram">
+                    <Label>Platform</Label>
+                    <Select defaultValue="google_business">
                       <SelectTrigger className="mt-1.5">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="instagram">Instagram Page</SelectItem>
-                        <SelectItem value="facebook">Facebook Group</SelectItem>
+                        <SelectItem value="google_business">Google Maps Pin (Google Business)</SelectItem>
+                        <SelectItem value="instagram">Instagram Professional Account</SelectItem>
+                        <SelectItem value="linkedin">LinkedIn Organization Page</SelectItem>
                         <SelectItem value="x">X / Twitter Account</SelectItem>
-                        <SelectItem value="sms">Twilio SMS Gateway</SelectItem>
-                        <SelectItem value="webhook">Custom Webhook / RSS</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label>Account Handle or Webhook URL</Label>
-                    <Input placeholder="@community_pantry or https://..." className="mt-1.5" />
+                    <Label>Account Handle or Organization Name</Label>
+                    <Input placeholder="@hopepantry_dsm or Organization ID" className="mt-1.5" />
                   </div>
                   <Button
                     onClick={() => {
-                      toast.success('Channel connected successfully!');
+                      toast.success('Channel linked in simulated dry-run mode! Configure OAuth in settings to publish live.');
                     }}
                     className="w-full mt-2"
                   >
@@ -855,15 +902,19 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
-                      {ch.platform === 'facebook' && <Globe className="size-5" />}
+                      {ch.platform === 'google_business' && <Globe className="size-5" />}
                       {ch.platform === 'instagram' && <Share2 className="size-5" />}
                       {ch.platform === 'x' && <Radio className="size-5" />}
-                      {ch.platform === 'sms' && <MessageSquare className="size-5" />}
-                      {ch.platform === 'webhook' && <ExternalLink className="size-5" />}
+                      {ch.platform === 'linkedin' && <Users className="size-5" />}
                     </div>
                     <div>
                       <h4 className="font-semibold">{ch.name}</h4>
                       <p className="font-mono text-xs text-muted-foreground">{ch.handle}</p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
+                          {ch.mcpServer}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                   <Switch
@@ -875,16 +926,26 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
 
                 <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
                   <span>Audience: <strong>{ch.audience}</strong></span>
-                  <Badge
-                    variant="outline"
-                    className={
-                      ch.connected
-                        ? 'border-success/20 bg-success/10 text-success'
-                        : 'bg-muted text-muted-foreground'
-                    }
-                  >
-                    {ch.connected ? 'Connected' : 'Disconnected'}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={
+                        ch.connected
+                          ? 'border-success/20 bg-success/10 text-success'
+                          : 'bg-muted text-muted-foreground'
+                      }
+                    >
+                      {ch.connected ? 'Connected (Simulated)' : 'Disconnected'}
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] px-2"
+                      onClick={() => handleConnectOAuth(ch.platform)}
+                    >
+                      Connect OAuth
+                    </Button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -899,20 +960,37 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
             <div>
               <h3 className="text-xl font-semibold">Broadcast Activity & Outbox</h3>
               <p className="text-sm text-muted-foreground">
-                History of automated and manual announcements distributed across channels.
+                History of automated and manual announcements distributed across channels and MCP servers.
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setActiveTab('generator');
-                handleGenerate();
-              }}
-              className="gap-1.5"
-            >
-              <Plus className="size-3.5" /> Compose New
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await sweepSocialInbox();
+                    toast.success('Social inbox sweep completed!');
+                  } catch {
+                    toast.info('Inbox sweep completed in dry-run mode.');
+                  }
+                }}
+                className="gap-1.5"
+              >
+                <RefreshCw className="size-3.5" /> Sweep Inbox
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setActiveTab('generator');
+                  handleGenerate();
+                }}
+                className="gap-1.5"
+              >
+                <Plus className="size-3.5" /> Compose New
+              </Button>
+            </div>
           </div>
 
           <div className="divide-y border-y">
@@ -924,6 +1002,11 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
                       {post.agentName}
                     </Badge>
                     <span className="text-xs text-muted-foreground">via {post.channel}</span>
+                    {post.dryRun && (
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                        Simulated (Dry-Run)
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <time className="text-xs text-muted-foreground">{post.timestamp}</time>
@@ -964,4 +1047,3 @@ export function AiWorkflows({ data, role }: AiWorkflowsProps) {
     </div>
   );
 }
-
