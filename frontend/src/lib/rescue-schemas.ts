@@ -9,8 +9,6 @@ export const donationSchema = z.object({
   storageRequired: z.enum(["ambient", "refrigerated", "frozen"]),
   allergens: z.string().trim().max(500),
   notes: z.string().trim().max(1000),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
 });
 
 export const onboardingSchema = z.object({

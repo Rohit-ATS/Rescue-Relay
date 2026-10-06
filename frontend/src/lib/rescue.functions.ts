@@ -50,21 +50,15 @@ export const createDonation = createServerFn({ method: "POST" })
     if (!canDonate) throw new Error("Only donor accounts can post donations.");
     if (new Date(data.pickupDeadline).getTime() <= Date.now()) throw new Error('Pickup deadline must be in the future.');
     const { data: profile } = await context.supabase.from("profiles").select("organization_id").eq("id", context.userId).maybeSingle();
-    const gatewayKey = process.env['LOVABLE_API_KEY'];
-    const mapsKey = process.env['GOOGLE_MAPS_API_KEY'];
-    if (!gatewayKey || !mapsKey) throw new Error('Map address lookup is not connected.');
-    const response = await fetch(`https://connector-gateway.lovable.dev/google_maps/maps/api/geocode/json?address=${encodeURIComponent(data.pickupAddress)}`, {headers:{Authorization:`Bearer ${gatewayKey}`,'X-Connection-Api-Key':mapsKey}});
-    if (!response.ok) {
-      const body=await response.text();console.error(`Google Maps lookup failed [${response.status}]: ${body}`);
-      if(response.status===403) {
-        if(body.includes('API_KEY_HTTP_REFERRER_BLOCKED')) throw new Error('Google Maps server key needs None or IP address application restrictions in Google Cloud Console.');
-        if(body.includes('API_KEY_SERVICE_BLOCKED')) throw new Error('Enable Geocoding API in the Google Maps server key’s allowed APIs.');
-      }
-      throw new Error(`Address lookup failed (${response.status}). Please try again later.`);
+    const { geocodePickupAddress, AddressNotFoundError } = await import("@/lib/geocode.server");
+    let location;
+    try {
+      location = await geocodePickupAddress(data.pickupAddress);
+    } catch (error) {
+      // Both failure modes already carry donor-facing wording; rethrow as-is.
+      if (error instanceof AddressNotFoundError) throw error;
+      throw error instanceof Error ? error : new Error('Address lookup failed. Please try again later.');
     }
-    const geo=await response.json() as {status:string;results?:Array<{geometry:{location:{lat:number;lng:number}}}>};
-    const location=geo.results?.[0]?.geometry.location;
-    if(geo.status!=='OK'||!location) throw new Error('Pickup address could not be located. Enter a complete street address.');
     const { data: donation, error } = await context.supabase.from("donations").insert({
       donor_user_id: context.userId,
       donor_org_id: profile?.organization_id ?? null,
@@ -77,8 +71,8 @@ export const createDonation = createServerFn({ method: "POST" })
       storage_required: data.storageRequired,
       allergens: data.allergens,
       notes: data.notes,
-      latitude: location.lat,
-      longitude: location.lng,
+      latitude: location.latitude,
+      longitude: location.longitude,
     }).select("id").single();
     if (error || !donation) throw new Error(error?.message ?? "Donation could not be created.");
 
@@ -86,7 +80,7 @@ export const createDonation = createServerFn({ method: "POST" })
     const createdAt = Date.now();
     const deadline = new Date(data.pickupDeadline).getTime();
     const candidates = (recipients ?? []).map((recipient) => {
-      const distanceMiles = Math.max(0.8, Math.hypot(recipient.latitude - location.lat, recipient.longitude - location.lng) * 52);
+      const distanceMiles = Math.max(0.8, Math.hypot(recipient.latitude - location.latitude, recipient.longitude - location.longitude) * 52);
       const result = scoreRescue({ name: recipient.name, distanceMiles, coldStorage: recipient.cold_storage, acceptsCategory: recipient.accepted_categories.includes(data.category), householdsServed: recipient.households_served, capacityLbs: recipient.capacity_lbs, requiredStorage: data.storageRequired, pounds: data.pounds, minutesRemaining: Math.max(0, (deadline - createdAt) / 60000) });
       return { donation_id: donation.id, recipient_org_id: recipient.id, score: result.score, explanation: result.explanation, status: "proposed" as const, eligible: result.eligible };
     }).filter((candidate) => candidate.eligible).map(({ eligible: _eligible, ...candidate }) => candidate);
@@ -94,7 +88,7 @@ export const createDonation = createServerFn({ method: "POST" })
       const { error: matchError } = await context.supabase.from("matches").insert(candidates);
       if (matchError) throw new Error(matchError.message);
     }
-    await context.supabase.from("rescue_events").insert({ donation_id: donation.id, actor_user_id: context.userId, event_type: "donation_posted", detail: `${data.pounds} lb ${data.category} posted` });
+    await context.supabase.from("rescue_events").insert({ donation_id: donation.id, actor_user_id: context.userId, event_type: "donation_posted", detail: `${data.pounds} lb ${data.category} posted · pickup located via ${location.provider}` });
     return { id: donation.id, matches: candidates.length };
   });
 
