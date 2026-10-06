@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { LiveMap, type MapRoute } from "@/components/rescuerelay/live-map";
 import {
   appleDirectionsUrl,
@@ -263,73 +264,102 @@ export function OpportunityCard({
     </article>
   );
 }
-/** A food bank in the partner directory, with the details a donor or driver needs. */
-export function FoodBankCard({
-  bank,
+const PARTNER_TYPE_LABELS: Record<string, string> = {
+  donor: "Food donor",
+  recipient: "Food bank",
+  coordinator: "Coordinator",
+};
+const VERIFICATION_TONE: Record<string, string> = {
+  verified: "bg-success/10 text-success border-success/20",
+  pending: "bg-signal/10 text-signal-strong border-signal/20",
+  suspended: "bg-destructive/10 text-destructive border-destructive/20",
+};
+
+/** One partner organization, with the detail a donor, driver or coordinator needs. */
+export function PartnerCard({
+  partner,
   coordinator,
   busy,
   onVerify,
 }: {
-  bank: FoodBank & { milesAway?: number };
+  partner: FoodBank & { milesAway?: number };
   coordinator: boolean;
   busy: boolean;
   onVerify: (id: string, status: "verified" | "suspended") => void;
 }) {
+  const isRecipient = partner.type === "recipient";
   return (
-    <article className="rounded-md border bg-card p-5">
-      <div className="flex flex-wrap justify-between gap-3">
-        <h3 className="text-lg font-semibold">{bank.name}</h3>
-        <Badge
-          variant="outline"
-          className={
-            bank.verificationStatus === "verified"
-              ? "bg-success/10 text-success border-success/20"
-              : bank.verificationStatus === "suspended"
-                ? "bg-destructive/10 text-destructive border-destructive/20"
-                : ""
-          }
-        >
-          {bank.verificationStatus}
+    <article className="flex flex-col rounded-md border bg-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-lg font-semibold">{partner.name}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {PARTNER_TYPE_LABELS[partner.type] ?? partner.type}
+          </p>
+        </div>
+        <Badge variant="outline" className={VERIFICATION_TONE[partner.verificationStatus] ?? ""}>
+          {partner.verificationStatus}
         </Badge>
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        <MapPin className="mr-1 inline size-3" />
-        {bank.address}
-        {bank.milesAway !== undefined && <> · {formatMiles(bank.milesAway)} away</>}
+
+      <p className="mt-3 flex items-start gap-1.5 text-sm text-muted-foreground">
+        <MapPin className="mt-0.5 size-3.5 shrink-0" />
+        <span>
+          {partner.address}
+          {partner.milesAway !== undefined && (
+            <span className="block text-xs">{formatMiles(partner.milesAway)} from you</span>
+          )}
+        </span>
       </p>
-      <dl className="mt-4 grid grid-cols-2 gap-3 border-t pt-4 text-sm">
-        <div>
-          <dt className="text-xs text-muted-foreground">Households served</dt>
-          <dd className="font-semibold">{bank.householdsServed.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Intake capacity</dt>
-          <dd className="font-semibold">{bank.capacityLbs.toLocaleString()} lb</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Cold chain</dt>
-          <dd className="font-semibold">{bank.coldStorage ? "Refrigerated" : "Ambient only"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Food accepted</dt>
-          <dd className="font-semibold capitalize">
-            {bank.acceptedCategories.length ? bank.acceptedCategories.join(", ") : "Not specified"}
+
+      {/* Capacity and cold chain only mean something for an organization that receives food. */}
+      {isRecipient ? (
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm">
+          <div>
+            <dt className="text-xs text-muted-foreground">Households served</dt>
+            <dd className="mt-0.5 font-semibold">{partner.householdsServed.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Intake capacity</dt>
+            <dd className="mt-0.5 font-semibold">{partner.capacityLbs.toLocaleString()} lb</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Cold chain</dt>
+            <dd className="mt-0.5 font-semibold">
+              {partner.coldStorage ? "Refrigerated" : "Ambient only"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Food accepted</dt>
+            <dd className="mt-0.5 font-semibold capitalize">
+              {partner.acceptedCategories.length
+                ? partner.acceptedCategories.join(", ")
+                : "Not specified"}
+            </dd>
+          </div>
+        </dl>
+      ) : (
+        <dl className="mt-4 border-t pt-4 text-sm">
+          <dt className="text-xs text-muted-foreground">On-site storage</dt>
+          <dd className="mt-0.5 font-semibold">
+            {partner.coldStorage ? "Refrigerated" : "Ambient only"}
           </dd>
-        </div>
-      </dl>
+        </dl>
+      )}
+
       {coordinator && (
         <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
-          {bank.verificationStatus !== "verified" && (
-            <Button size="sm" disabled={busy} onClick={() => onVerify(bank.id, "verified")}>
+          {partner.verificationStatus !== "verified" && (
+            <Button size="sm" disabled={busy} onClick={() => onVerify(partner.id, "verified")}>
               <ShieldCheck /> Verify
             </Button>
           )}
-          {bank.verificationStatus !== "suspended" && (
+          {partner.verificationStatus !== "suspended" && (
             <Button
               variant="outline"
               size="sm"
               disabled={busy}
-              onClick={() => onVerify(bank.id, "suspended")}
+              onClick={() => onVerify(partner.id, "suspended")}
             >
               <X /> Suspend
             </Button>
@@ -339,6 +369,123 @@ export function FoodBankCard({
     </article>
   );
 }
+
+/** The partner directory: every organization in the network, filterable and searchable. */
+export function PartnerDirectory({
+  partners,
+  coordinator,
+  busy,
+  locationShared,
+  onVerify,
+  onRequestLocation,
+  locating,
+}: {
+  partners: Array<FoodBank & { milesAway?: number }>;
+  coordinator: boolean;
+  busy: boolean;
+  locationShared: boolean;
+  onVerify: (id: string, status: "verified" | "suspended") => void;
+  onRequestLocation: () => void;
+  locating: boolean;
+}) {
+  const [kind, setKind] = useState<"all" | "recipient" | "donor">("all");
+  const [query, setQuery] = useState("");
+
+  const counts = useMemo(
+    () => ({
+      all: partners.length,
+      recipient: partners.filter((p) => p.type === "recipient").length,
+      donor: partners.filter((p) => p.type === "donor").length,
+    }),
+    [partners],
+  );
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return partners.filter((p) => {
+      if (kind !== "all" && p.type !== kind) return false;
+      if (!needle) return true;
+      return (
+        p.name.toLowerCase().includes(needle) ||
+        p.address.toLowerCase().includes(needle) ||
+        p.acceptedCategories.some((c) => c.toLowerCase().includes(needle))
+      );
+    });
+  }, [partners, kind, query]);
+
+  const filters: Array<[typeof kind, string]> = [
+    ["all", `All partners (${counts.all})`],
+    ["recipient", `Food banks (${counts.recipient})`],
+    ["donor", `Donors (${counts.donor})`],
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold">Partner directory</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Every organization in the network{locationShared ? ", nearest first" : ""}. Food banks
+            show the capacity and cold chain that decide what they can take.
+          </p>
+        </div>
+        {!locationShared && (
+          <Button variant="outline" size="sm" disabled={locating} onClick={onRequestLocation}>
+            <MapPin /> {locating ? "Locating…" : "Use my location"}
+          </Button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-1 rounded-md border p-1">
+          {filters.map(([value, label]) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={kind === value ? "default" : "ghost"}
+              className="h-8"
+              aria-pressed={kind === value}
+              onClick={() => setKind(value)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name, address or food type"
+          aria-label="Search partners"
+          className="h-9 max-w-xs"
+        />
+      </div>
+
+      {visible.length ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visible.map((p) => (
+            <PartnerCard
+              key={p.id}
+              partner={p}
+              coordinator={coordinator}
+              busy={busy}
+              onVerify={onVerify}
+            />
+          ))}
+        </div>
+      ) : (
+        <Empty
+          title={query || kind !== "all" ? "No partners match that" : "No partners listed yet"}
+          copy={
+            query || kind !== "all"
+              ? "Try a different search, or switch back to all partners."
+              : "Verified organizations appear here as coordinators approve them."
+          }
+        />
+      )}
+    </div>
+  );
+}
+
 /** Describes how long is left, or how long ago it closed, without a per-second re-render. */
 function relativeTime(target: number, now: number) {
   const diff = Math.abs(target - now);

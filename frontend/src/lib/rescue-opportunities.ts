@@ -16,6 +16,8 @@ import {
 export type FoodBank = {
   id: string;
   name: string;
+  /** donor, recipient or coordinator — the directory lists every kind. */
+  type: string;
   address: string;
   latitude: number;
   longitude: number;
@@ -108,6 +110,7 @@ export function toFoodBank(org: OrganizationRow): FoodBank {
   return {
     id: org.id,
     name: org.name,
+    type: org.type,
     address: org.address,
     latitude: org.latitude,
     longitude: org.longitude,
@@ -119,20 +122,19 @@ export function toFoodBank(org: OrganizationRow): FoodBank {
   };
 }
 
-/** Every verified food bank, for the partner directory. */
-export function listFoodBanks(
+/** Every partner organization, of any type, for the directory. */
+export function listPartners(
   organizations: OrganizationRow[],
   viewer?: Coords | null,
 ): Array<FoodBank & { milesAway?: number }> {
   return organizations
-    .filter((org) => org.type === "recipient")
     .map((org) => {
-      const bank = toFoodBank(org);
+      const partner = toFoodBank(org);
       const milesAway =
-        viewer && hasPosition(viewer) && hasPosition(bank)
-          ? distanceMiles(viewer, bank)
+        viewer && hasPosition(viewer) && hasPosition(partner)
+          ? distanceMiles(viewer, partner)
           : undefined;
-      return milesAway === undefined ? bank : { ...bank, milesAway };
+      return milesAway === undefined ? partner : { ...partner, milesAway };
     })
     .sort((a, b) => {
       const am = "milesAway" in a ? (a.milesAway as number) : Infinity;
@@ -140,6 +142,17 @@ export function listFoodBanks(
       // Nearest first when a position is known; otherwise alphabetical.
       return am - bm || a.name.localeCompare(b.name);
     });
+}
+
+/** Just the food banks, for views that only concern recipients. */
+export function listFoodBanks(
+  organizations: OrganizationRow[],
+  viewer?: Coords | null,
+): Array<FoodBank & { milesAway?: number }> {
+  return listPartners(
+    organizations.filter((org) => org.type === "recipient"),
+    viewer,
+  );
 }
 
 /**

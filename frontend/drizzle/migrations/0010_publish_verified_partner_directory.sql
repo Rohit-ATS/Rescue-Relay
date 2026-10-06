@@ -3,10 +3,10 @@
 -- food bank a run would serve. Migration 0009 scoped organization reads to rescues the
 -- user is already party to, which makes both impossible for a new volunteer.
 --
--- Verified recipient organizations are public-facing nonprofits whose name, address and
--- capacity are directory information by nature. Organizations that are still pending or
--- have been suspended stay hidden, as do donor organizations, so this widens visibility
--- only for partners that coordinators have explicitly verified.
+-- A verified organization, donor or recipient, is a public-facing partner whose name,
+-- address and capacity are directory information by nature. Organizations that are still
+-- pending or have been suspended stay hidden, so this widens visibility only for partners
+-- a coordinator has explicitly verified.
 
 DROP POLICY "Users view involved organizations" ON public.organizations;
 
@@ -17,7 +17,7 @@ TO authenticated
 USING (
   public.has_role(auth.uid(), 'coordinator')
   OR id = (SELECT organization_id FROM public.profiles WHERE id = auth.uid())
-  OR (type = 'recipient' AND verification_status = 'verified')
+  OR verification_status = 'verified'
   OR EXISTS (
     SELECT 1
     FROM public.matches m

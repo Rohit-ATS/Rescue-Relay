@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildOpportunities,
   listFoodBanks,
+  listPartners,
   type OpportunityInputs,
 } from "@/lib/rescue-opportunities";
 
@@ -152,6 +153,20 @@ describe("Volunteer opportunities", () => {
       NOW,
     );
     expect(result.map((o) => o.donationId)).toEqual(["don-near", "don-far", "don-unclaimable"]);
+  });
+});
+
+describe("Partner directory", () => {
+  it("lists every organization type, not just food banks", () => {
+    const partners = listPartners(
+      [org({ id: "bank" }), org({ id: "kitchen", name: "Court Ave Kitchen", type: "donor" })],
+      null,
+    );
+    expect(partners.map((p) => p.type).sort()).toEqual(["donor", "recipient"]);
+  });
+
+  it("carries the organization type through so the card can label it", () => {
+    expect(listPartners([org({ type: "donor" })], null)[0]?.type).toBe("donor");
   });
 });
 

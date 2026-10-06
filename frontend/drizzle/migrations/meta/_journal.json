@@ -76,7 +76,7 @@
       "idx": 10,
       "version": "7",
       "when": 1791258317471,
-      "tag": "0010_publish_verified_recipient_directory",
+      "tag": "0010_publish_verified_partner_directory",
       "breakpoints": true
     }
   ]

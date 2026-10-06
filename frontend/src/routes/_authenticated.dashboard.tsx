@@ -18,8 +18,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { createDonation, getWorkspace, updateRescue, verifyPartner } from '@/lib/rescue.functions';
 import { buildActivityFeed } from '@/lib/rescue-activity';
-import { buildOpportunities, listFoodBanks } from '@/lib/rescue-opportunities';
-import { ActivityCard, Empty, FoodBankCard, OpportunityCard } from '@/components/rescuerelay/workspace-cards';
+import { buildOpportunities, listPartners } from '@/lib/rescue-opportunities';
+import { ActivityCard, Empty, OpportunityCard, PartnerDirectory } from '@/components/rescuerelay/workspace-cards';
 import { useViewerLocation } from '@/lib/use-viewer-location';
 export const Route=createFileRoute('/_authenticated/dashboard')({head:()=>({meta:[{title:'Rescue command center — RescueRelay'},{name:'description',content:'Coordinate urgent food donations, nonprofit matches, volunteer routes, and recorded impact.'},{property:'og:title',content:'RescueRelay command center'},{property:'og:description',content:'Live dispatch, partner verification, and food rescue history.'},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary_large_image'}]}),component:Dashboard});
 type Workspace=Awaited<ReturnType<typeof getWorkspace>>;
@@ -52,7 +52,7 @@ function Dashboard(){
  const activity=useMemo(()=>buildActivityFeed({userId:data?.userId??'',organizationId:data?.profile?.organization_id??null,roles,donations:data?.donations??[],matches:data?.matches??[],deliveries:data?.deliveries??[]},clock),[data,roles,clock]);
  const waitingCount=activity.current.filter(a=>a.waitingOnYou).length;
  const opportunities=useMemo(()=>buildOpportunities({donations:data?.donations??[],matches:data?.matches??[],organizations:data?.organizations??[],deliveries:data?.deliveries??[],viewer:location.coords},clock),[data,location.coords,clock]);
- const foodBanks=useMemo(()=>listFoodBanks(data?.organizations??[],location.coords),[data,location.coords]);
+ const partners=useMemo(()=>listPartners(data?.organizations??[],location.coords),[data,location.coords]);
  const completed=data?.donations.filter(d=>d.status==='delivered')??[];const pounds=completed.reduce((n,d)=>n+Number(d.pounds),0);
  const duration=data?.deliveries.filter(d=>d.picked_up_at&&d.delivered_at).map(d=>(new Date(d.delivered_at??'').getTime()-new Date(d.picked_up_at??'').getTime())/60000).filter(n=>Number.isFinite(n)&&n>=0)??[];
  const median=duration.length?[...duration].sort((a,b)=>a-b)[Math.floor(duration.length/2)]:undefined;
@@ -85,13 +85,7 @@ function Dashboard(){
 </TabsContent>
  <TabsContent value="route" className="mt-6"><div className="grid gap-6 xl:grid-cols-2"><LiveMap points={detailPoints}/><section>{active&&accepted?<><p className="text-xs font-bold uppercase text-primary">{delivery?'Delivery handoff':'Available assignment'}</p><h2 className="mt-2 text-2xl font-semibold">{active.title}</h2><div className="mt-6 space-y-5 border-y py-5"><Stop title="Pickup" detail={active.pickup_address} time={delivery?.picked_up_at}/><Stop title="Delivery" detail={recipient?.name??'Recipient'} time={delivery?.delivered_at}/></div><p className="mt-4 text-sm text-muted-foreground">{Number(active.pounds)} lb · {active.storage_required}</p><p className="mt-3 text-sm">Driver: {delivery?.driver_name||'Not yet assigned'}</p><p className="mt-4 border-l-2 border-info pl-3 text-sm leading-6 text-muted-foreground">Follow your organization’s food-safety policy. Pickup confirmation acknowledges that you checked the handling requirements.</p>{!delivery?.driver_user_id&&!delivery?.picked_up_at&&(role==='driver'||coordinator)&&<Button className="mt-5" disabled={busy||deadline<clock} onClick={()=>act(accepted.id,'claim')}><Truck/> Claim route</Button>}{delivery&&canHandoff&&<div className="mt-5 flex flex-wrap gap-2"><Button disabled={busy||Boolean(delivery.picked_up_at)} onClick={()=>act(delivery.id,'pickup')}><Check/> Confirm safe pickup</Button><Button disabled={busy||!delivery.picked_up_at||Boolean(delivery.delivered_at)} onClick={()=>act(delivery.id,'deliver')}><PackageCheck/> Confirm delivery</Button></div>}{delivery?.driver_user_id&&!canHandoff&&<p className="mt-5 text-sm text-muted-foreground">The assigned driver records this handoff.</p>}</>:<Empty title="No accepted route selected" copy="Choose an accepted rescue from the relay board to view its delivery."/>}<div className="mt-8"><h3 className="font-semibold">Accepted rescues</h3>{data.matches.filter(m=>m.status==='accepted').map(m=>{const d=data.donations.find(d=>d.id===m.donation_id);return d?<Button key={m.id} variant="ghost" className="mt-2 h-auto w-full justify-start whitespace-normal text-left" onClick={()=>setSelected(d.id)}>{d.title}<ArrowRight/></Button>:null;})}</div></section></div></TabsContent>
  <TabsContent value="workflows" className="mt-6"><AiWorkflows data={data} role={role}/></TabsContent>
- <TabsContent value="partners" className="mt-6 space-y-6">
- <div className="flex flex-wrap items-end justify-between gap-3">
-  <div><h2 className="text-2xl font-semibold">Food bank directory</h2><p className="mt-1 text-sm text-muted-foreground">{foodBanks.length} verified recipient{foodBanks.length===1?'':'s'}{location.coords?' · nearest first':''}. These are the partners your donations can reach.</p></div>
-  {!location.coords&&<Button variant="outline" size="sm" disabled={location.status==='prompting'} onClick={location.request}><MapPin/> {location.status==='prompting'?'Locating…':'Use my location'}</Button>}
- </div>
- <div className="grid gap-4 md:grid-cols-2">{foodBanks.length?foodBanks.map(b=><FoodBankCard key={b.id} bank={b} coordinator={coordinator} busy={busy} onVerify={changeVerification}/>):<Empty title="No partners listed yet" copy="Verified recipient organizations appear here as coordinators approve them."/>}</div>
-</TabsContent>
+ <TabsContent value="partners" className="mt-6"><PartnerDirectory partners={partners} coordinator={coordinator} busy={busy} locationShared={Boolean(location.coords)} locating={location.status==='prompting'} onVerify={changeVerification} onRequestLocation={location.request}/></TabsContent>
  <TabsContent value="activity" className="mt-6 space-y-10">
  <section>
   <div className="flex flex-wrap items-end justify-between gap-2"><h2 className="text-2xl font-semibold">Current activities</h2>{activity.current.length>0&&<p className="text-sm text-muted-foreground">{waitingCount?`${waitingCount} waiting on you`:'Nothing blocked on you'}</p>}</div>

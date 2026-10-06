@@ -133,16 +133,42 @@ Directions service when the browser key authorizes; the distance/time estimate a
 "Open in Google Maps" / "Open in Apple Maps" links need no key at all, so a driver can always
 start navigating.
 
-**Partners** lists every verified food bank with the same detail, nearest first, and gives
-coordinators verify/suspend controls inline.
+**Partners** is the full directory: every organization in the network, donors and food banks
+alike, filterable by type and searchable by name, address or food category. Food banks show
+households served, intake capacity, cold chain and categories accepted; donors show their
+on-site storage. Nearest first once a location is shared, with coordinator verify/suspend
+controls inline.
 
 Location is optional throughout: without it the lists still render, just ordered by deadline
 rather than distance.
 
-> **Migration 0010 must be applied** for Partners and Opportunities to show food banks a user
-> is not already involved with. Migration 0009 scoped organization reads to rescues you are
-> party to; 0010 re-opens *verified recipient* organizations only, leaving pending, suspended
-> and donor organizations hidden.
+> **Migration 0010 must be applied** for Partners and Opportunities to show organizations a
+> user is not already involved with. Migration 0009 scoped organization reads to rescues you
+> are party to; 0010 re-opens *verified* organizations of any type, leaving pending and
+> suspended ones visible only to coordinators.
+
+---
+
+## Demo data
+
+[`frontend/supabase/seed-demo.sql`](frontend/supabase/seed-demo.sql) populates a full network
+to click through. Paste it into the Supabase SQL Editor and run it — it runs as `postgres`, so
+no API keys are needed, and it is safe to re-run.
+
+It creates four accounts, all with the password `RescueRelay!2026`:
+
+| Account | Role | Shows |
+| --- | --- | --- |
+| `donor@rescuerelay-qa.org` | Donor | Postings across every stage, plus delivered and expired in Recent |
+| `recipient@rescuerelay-qa.org` | Recipient | An unanswered offer under "Waiting on you", plus a declined and an expired one in Recent |
+| `driver@rescuerelay-qa.org` | Driver | One route to collect, one to drop off, two completed in Recent |
+| `coordinator@rescuerelay-qa.org` | Coordinator | Everything, a stalled rescue needing an exception, and verify/suspend on the directory |
+
+It also seeds nine organizations (five verified food banks, one pending, one suspended, two
+donors) and ten rescues covering open, matched, accepted, driver-assigned, picked-up,
+delivered, expired and declined. Organization names are fictional, placed at real Des Moines
+street addresses so distances, sorting and driving routes behave realistically. Deadlines are
+relative to when you run it, so the demo is always current.
 
 ---
 
