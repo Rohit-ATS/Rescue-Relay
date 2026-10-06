@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
+    "build:pages": "npm --prefix frontend run build:pages",
     "preview": "npm --prefix frontend run preview",
     "test": "npm --prefix frontend run test",
     "lint": "npm --prefix frontend run lint"
