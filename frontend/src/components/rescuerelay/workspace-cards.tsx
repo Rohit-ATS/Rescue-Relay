@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   Check,
@@ -6,11 +6,13 @@ import {
   MapPin,
   PackageCheck,
   Route as RouteIcon,
+  Globe,
   Mail,
   Phone,
   ShieldCheck,
   Truck,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -510,6 +512,37 @@ const VERIFICATION_TONE: Record<string, string> = {
   suspended: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
+/** A labelled figure in the record strip. */
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 text-xl font-semibold tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
+/** One contact row. Rendered only when there is something to show. */
+function ContactRow({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-3">
+      <dt className="flex w-20 shrink-0 items-center gap-1.5 text-muted-foreground">
+        <Icon className="size-3.5" aria-hidden="true" />
+        {label}
+      </dt>
+      <dd className="min-w-0 break-words">{children}</dd>
+    </div>
+  );
+}
+
 /** Everything known about one partner: how to reach them, where they are, what they have moved. */
 export function PartnerDetail({
   partner,
@@ -531,11 +564,15 @@ export function PartnerDetail({
   if (!partner) return null;
   const isRecipient = partner.type === "recipient";
   const located = hasPosition(partner);
-  const origin = viewer && hasPosition(viewer) ? viewer : null;
+  const destination = { latitude: partner.latitude, longitude: partner.longitude };
+  const origin = viewer && hasPosition(viewer) ? viewer : destination;
+  const hasContact = Boolean(
+    partner.phone || partner.contactEmail || partner.hoursNote || partner.website,
+  );
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">{PARTNER_TYPE_LABELS[partner.type] ?? partner.type}</Badge>
@@ -547,186 +584,152 @@ export function PartnerDetail({
             </Badge>
           </div>
           <DialogTitle className="mt-2 text-2xl">{partner.name}</DialogTitle>
-          <DialogDescription>
-            {partner.address}
-            {partner.milesAway !== undefined && ` · ${formatMiles(partner.milesAway)} from you`}
+          {/* The address lives here only; repeating it in the contact list was noise. */}
+          <DialogDescription className="flex items-start gap-1.5">
+            <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              {partner.address}
+              {partner.milesAway !== undefined && ` · ${formatMiles(partner.milesAway)} from you`}
+            </span>
           </DialogDescription>
         </DialogHeader>
 
-        <section>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Contact</h3>
-          <dl className="mt-3 space-y-2.5 text-sm">
-            <div className="flex gap-3">
-              <dt className="flex w-28 shrink-0 items-center gap-1.5 text-muted-foreground">
-                <Phone className="size-3.5" /> Phone
-              </dt>
-              <dd>
-                {partner.phone ? (
-                  <a
-                    className="font-medium underline underline-offset-2"
-                    href={`tel:${partner.phone.replace(/[^+\d]/g, "")}`}
-                  >
-                    {partner.phone}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">Not provided</span>
-                )}
-              </dd>
-            </div>
-            <div className="flex gap-3">
-              <dt className="flex w-28 shrink-0 items-center gap-1.5 text-muted-foreground">
-                <Mail className="size-3.5" /> Email
-              </dt>
-              <dd>
-                {partner.contactEmail ? (
-                  <a
-                    className="font-medium underline underline-offset-2"
-                    href={`mailto:${partner.contactEmail}`}
-                  >
-                    {partner.contactEmail}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">Not provided</span>
-                )}
-              </dd>
-            </div>
-            <div className="flex gap-3">
-              <dt className="flex w-28 shrink-0 items-center gap-1.5 text-muted-foreground">
-                <Clock3 className="size-3.5" /> Hours
-              </dt>
-              <dd>
-                {partner.hoursNote || <span className="text-muted-foreground">Not provided</span>}
-              </dd>
-            </div>
-            <div className="flex gap-3">
-              <dt className="flex w-28 shrink-0 items-center gap-1.5 text-muted-foreground">
-                <MapPin className="size-3.5" /> Address
-              </dt>
-              <dd>{partner.address}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Location</h3>
-          {located ? (
-            <div className="mt-3 space-y-2">
-              <LiveMap
-                compact
-                points={[
-                  {
-                    id: partner.id,
-                    lat: partner.latitude,
-                    lng: partner.longitude,
-                    label: partner.name,
-                    kind: isRecipient ? "recipient" : "donor",
-                  },
-                ]}
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button asChild variant="outline" size="sm">
-                  <a
-                    href={directionsUrl(
-                      origin ?? { latitude: partner.latitude, longitude: partner.longitude },
-                      {
-                        latitude: partner.latitude,
-                        longitude: partner.longitude,
-                      },
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Directions in Google Maps
-                  </a>
-                </Button>
-                <Button asChild variant="outline" size="sm">
-                  <a
-                    href={appleDirectionsUrl(
-                      origin ?? { latitude: partner.latitude, longitude: partner.longitude },
-                      {
-                        latitude: partner.latitude,
-                        longitude: partner.longitude,
-                      },
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Directions in Apple Maps
-                  </a>
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted-foreground">
-              This partner has no mapped coordinates yet.
-            </p>
-          )}
-        </section>
-
-        {isRecipient && (
-          <section>
-            <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Intake</h3>
-            <dl className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-              <div>
-                <dt className="text-xs text-muted-foreground">Households</dt>
-                <dd className="mt-0.5 text-lg font-semibold">
-                  {partner.householdsServed.toLocaleString()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Capacity</dt>
-                <dd className="mt-0.5 text-lg font-semibold">
-                  {partner.capacityLbs.toLocaleString()} lb
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Cold chain</dt>
-                <dd className="mt-0.5 font-semibold">
-                  {partner.coldStorage ? "Refrigerated" : "Ambient only"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Accepts</dt>
-                <dd className="mt-0.5 font-semibold capitalize">
-                  {partner.acceptedCategories.length
-                    ? partner.acceptedCategories.join(", ")
-                    : "Not specified"}
-                </dd>
-              </div>
-            </dl>
-          </section>
-        )}
-
+        {/* What this partner has actually done leads, rather than sitting below the fold. */}
         {summary && (
-          <section>
-            <h3 className="text-xs font-bold uppercase tracking-wide text-primary">
-              Rescue record
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Counted from the rescues you have access to.
-            </p>
-            <dl className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-              <div>
-                <dt className="text-xs text-muted-foreground">Rescues</dt>
-                <dd className="mt-0.5 text-lg font-semibold">{summary.totalRescues}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Completed</dt>
-                <dd className="mt-0.5 text-lg font-semibold">{summary.completedRescues}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">In progress</dt>
-                <dd className="mt-0.5 text-lg font-semibold">{summary.activeRescues}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Food moved</dt>
-                <dd className="mt-0.5 text-lg font-semibold">
-                  {Math.round(summary.poundsMoved).toLocaleString()} lb
-                </dd>
-              </div>
-            </dl>
-          </section>
+          <dl className="grid grid-cols-2 gap-4 rounded-md border bg-muted/40 p-4 sm:grid-cols-4">
+            <Stat label="Rescues" value={String(summary.totalRescues)} />
+            <Stat label="Completed" value={String(summary.completedRescues)} />
+            <Stat label="In progress" value={String(summary.activeRescues)} />
+            <Stat
+              label="Food moved"
+              value={`${Math.round(summary.poundsMoved).toLocaleString()} lb`}
+            />
+          </dl>
         )}
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div className="space-y-6">
+            <section>
+              <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Contact</h3>
+              {hasContact ? (
+                <dl className="mt-3 space-y-2.5 text-sm">
+                  {partner.phone && (
+                    <ContactRow icon={Phone} label="Phone">
+                      <a
+                        className="font-medium underline underline-offset-2"
+                        href={`tel:${partner.phone.replace(/[^+\d]/g, "")}`}
+                      >
+                        {partner.phone}
+                      </a>
+                    </ContactRow>
+                  )}
+                  {partner.contactEmail && (
+                    <ContactRow icon={Mail} label="Email">
+                      <a
+                        className="font-medium underline underline-offset-2"
+                        href={`mailto:${partner.contactEmail}`}
+                      >
+                        {partner.contactEmail}
+                      </a>
+                    </ContactRow>
+                  )}
+                  {partner.hoursNote && (
+                    <ContactRow icon={Clock3} label="Hours">
+                      {partner.hoursNote}
+                    </ContactRow>
+                  )}
+                  {partner.website && (
+                    <ContactRow icon={Globe} label="Website">
+                      <a
+                        className="font-medium underline underline-offset-2"
+                        href={partner.website}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {partner.website.replace(/^https?:\/\//, "")}
+                      </a>
+                    </ContactRow>
+                  )}
+                </dl>
+              ) : (
+                // Three empty rows read as a broken screen; one line reads as a fact.
+                <p className="mt-3 text-sm text-muted-foreground">
+                  No contact details on file. Reach this partner through a coordinator.
+                </p>
+              )}
+            </section>
+
+            {isRecipient && (
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Intake</h3>
+                <dl className="mt-3 space-y-2.5 text-sm">
+                  <div className="flex gap-3">
+                    <dt className="w-20 shrink-0 text-muted-foreground">Households</dt>
+                    <dd className="font-medium">{partner.householdsServed.toLocaleString()}</dd>
+                  </div>
+                  <div className="flex gap-3">
+                    <dt className="w-20 shrink-0 text-muted-foreground">Capacity</dt>
+                    <dd className="font-medium">{partner.capacityLbs.toLocaleString()} lb</dd>
+                  </div>
+                  <div className="flex gap-3">
+                    <dt className="w-20 shrink-0 text-muted-foreground">Cold chain</dt>
+                    <dd className="font-medium">
+                      {partner.coldStorage ? "Refrigerated" : "Ambient only"}
+                    </dd>
+                  </div>
+                  <div className="flex gap-3">
+                    <dt className="w-20 shrink-0 text-muted-foreground">Accepts</dt>
+                    <dd className="font-medium capitalize">
+                      {partner.acceptedCategories.length
+                        ? partner.acceptedCategories.join(", ")
+                        : "Not specified"}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            )}
+          </div>
+
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Location</h3>
+            {located ? (
+              <div className="mt-3 space-y-2">
+                <LiveMap
+                  compact
+                  points={[
+                    {
+                      id: partner.id,
+                      lat: partner.latitude,
+                      lng: partner.longitude,
+                      label: partner.name,
+                      kind: isRecipient ? "recipient" : "donor",
+                    },
+                  ]}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild variant="outline" size="sm">
+                    <a href={directionsUrl(origin, destination)} target="_blank" rel="noreferrer">
+                      Google Maps
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <a
+                      href={appleDirectionsUrl(origin, destination)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Apple Maps
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                This partner has no mapped coordinates yet.
+              </p>
+            )}
+          </section>
+        </div>
 
         {coordinator && (
           <div className="flex flex-wrap gap-2 border-t pt-4">

@@ -164,6 +164,17 @@ export function LiveMap({
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  // Content keys, so callers may pass an inline array without thrashing the map.
+  const pointsKey = JSON.stringify(points.map((p) => [p.id, p.lat, p.lng, p.label, p.kind]));
+  const routeKey = JSON.stringify(route ?? null);
+  // Read the latest values inside the effect without making them dependencies.
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const onRouteSummaryRef = useRef(onRouteSummary);
+  onRouteSummaryRef.current = onRouteSummary;
+
   const pickupCount = points.filter((p) => p.kind === "donor").length;
   const dropoffCount = points.length - pickupCount;
   const key = import.meta.env["VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY"];
@@ -192,7 +203,9 @@ export function LiveMap({
       .then(() => {
         const maps = window.google?.maps;
         if (!active || !maps || !ref.current) return;
-        const valid = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+        const valid = pointsRef.current.filter(
+          (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng),
+        );
         const map = new maps.Map(ref.current, {
           center: valid[0] ?? { lat: 41.5908, lng: -93.6208 },
           zoom: 12,
@@ -228,6 +241,7 @@ export function LiveMap({
         });
         if (valid.length > 1) map.fitBounds(bounds, 45);
         setReady(true);
+        const route = routeRef.current;
         if (route) {
           // Directions are a best-effort overlay: the markers and the external
           // navigation link already stand on their own if routing is unavailable.
@@ -248,14 +262,14 @@ export function LiveMap({
               if (!active) return;
               renderer.setDirections(result);
               const leg = result.routes?.[0]?.legs?.[0];
-              onRouteSummary?.(
+              onRouteSummaryRef.current?.(
                 leg?.distance && leg.duration
                   ? { distance: leg.distance.text, duration: leg.duration.text }
                   : null,
               );
             })
             .catch(() => {
-              if (active) onRouteSummary?.(null);
+              if (active) onRouteSummaryRef.current?.(null);
             });
         }
       })
@@ -269,7 +283,7 @@ export function LiveMap({
       renderers.forEach((renderer) => renderer.setMap(null));
       infoWindows.forEach((w) => w.close());
     };
-  }, [key, channel, points, retry, route, onRouteSummary]);
+  }, [key, channel, pointsKey, retry, routeKey]);
   return (
     <div
       className={`relative overflow-hidden rounded-md border bg-muted ${compact ? "h-64" : "h-[420px]"}`}
@@ -299,29 +313,43 @@ export function LiveMap({
       )}
       {ready && (
         <div className="absolute bottom-3 left-3 rounded-md border bg-background/95 px-3 py-2 text-xs shadow-sm">
-          {points.length ? (
+          {points.length === 1 && points[0] ? (
+            // A single-location map needs a name, not a tally and a key of two kinds.
+            <p className="flex items-center gap-1.5 font-medium">
+              <span
+                aria-hidden="true"
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: MARKER_COLORS[points[0].kind].fill }}
+              />
+              {points[0].label}
+            </p>
+          ) : points.length ? (
             <>
               <p className="font-semibold">
                 {pickupCount} pickup{pickupCount === 1 ? "" : "s"} · {dropoffCount} food bank
                 {dropoffCount === 1 ? "" : "s"}
               </p>
               <ul className="mt-1.5 space-y-1">
-                <li className="flex items-center gap-1.5">
-                  <span
-                    aria-hidden="true"
-                    className="size-2.5 rounded-full"
-                    style={{ backgroundColor: MARKER_COLORS.donor.fill }}
-                  />
-                  Pickup location
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span
-                    aria-hidden="true"
-                    className="size-2.5 rounded-full"
-                    style={{ backgroundColor: MARKER_COLORS.recipient.fill }}
-                  />
-                  Food bank
-                </li>
+                {pickupCount > 0 && (
+                  <li className="flex items-center gap-1.5">
+                    <span
+                      aria-hidden="true"
+                      className="size-2.5 rounded-full"
+                      style={{ backgroundColor: MARKER_COLORS.donor.fill }}
+                    />
+                    Pickup location
+                  </li>
+                )}
+                {dropoffCount > 0 && (
+                  <li className="flex items-center gap-1.5">
+                    <span
+                      aria-hidden="true"
+                      className="size-2.5 rounded-full"
+                      style={{ backgroundColor: MARKER_COLORS.recipient.fill }}
+                    />
+                    Food bank
+                  </li>
+                )}
               </ul>
             </>
           ) : (

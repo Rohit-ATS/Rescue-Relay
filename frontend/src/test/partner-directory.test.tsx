@@ -96,13 +96,34 @@ describe("Partner directory", () => {
     expect(within(dialog).getByText("Mon-Sat 8am-5pm")).toBeInTheDocument();
   });
 
-  it("says so plainly when contact columns have not been filled in", async () => {
+  it("says so once when no contact details are on file, rather than three empty rows", async () => {
     const user = userEvent.setup();
-    renderDirectory([partner({ phone: "", contactEmail: "", hoursNote: "" })]);
+    renderDirectory([partner({ phone: "", contactEmail: "", hoursNote: "", website: "" })]);
     await user.click(screen.getByRole("button", { name: /view details for/i }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getAllByText("Not provided")).toHaveLength(3);
+    expect(within(dialog).getByText(/no contact details on file/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText("Phone")).not.toBeInTheDocument();
+  });
+
+  it("shows only the contact rows that have a value", async () => {
+    const user = userEvent.setup();
+    renderDirectory([partner({ contactEmail: "", hoursNote: "", website: "" })]);
+    await user.click(screen.getByRole("button", { name: /view details for/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Phone")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Email")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Hours")).not.toBeInTheDocument();
+  });
+
+  it("does not repeat the address inside the contact list", async () => {
+    const user = userEvent.setup();
+    renderDirectory();
+    await user.click(screen.getByRole("button", { name: /view details for/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getAllByText("2220 E 17th St, Des Moines, IA")).toHaveLength(1);
   });
 
   it("reports the rescue record for the partner", async () => {
