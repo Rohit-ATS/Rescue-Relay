@@ -342,6 +342,16 @@ export function AppShell({
   }
 
   function selectView(value: string) {
+    if (value === "workflows") {
+      void navigate({ to: "/workflows" });
+      setDrawerOpen(false);
+      return;
+    }
+    if (view === "workflows") {
+      void navigate({ to: "/dashboard", search: { tab: value } });
+      setDrawerOpen(false);
+      return;
+    }
     onView(value);
     setDrawerOpen(false);
   }
