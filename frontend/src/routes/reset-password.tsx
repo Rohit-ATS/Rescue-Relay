@@ -1,0 +1,16 @@
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { usePartnerAuth } from '@/lib/auth-context';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Brand } from '@/components/rescuerelay/brand';
+export const Route=createFileRoute('/reset-password')({head:()=>({meta:[{title:'Reset password — RescueRelay'},{name:'description',content:'Set a new password for your RescueRelay account.'},{property:'og:title',content:'Reset RescueRelay password'},{property:'og:description',content:'Secure RescueRelay account recovery.'},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary'}]}),component:ResetPassword});
+function ResetPassword(){
+ const navigate=useNavigate(); const {user,loading,recovery}=usePartnerAuth();
+ const [allowed,setAllowed]=useState(false); const [password,setPassword]=useState(''); const [confirm,setConfirm]=useState(''); const [message,setMessage]=useState(''); const [busy,setBusy]=useState(false);
+ useEffect(()=>{const hash=new URLSearchParams(window.location.hash.slice(1));setAllowed(recovery||hash.get('type')==='recovery'||sessionStorage.getItem('rescue-recovery')==='true');},[recovery]);
+ async function submit(e:React.FormEvent){e.preventDefault();setMessage('');if(!allowed||!user){setMessage('Open a valid password-reset link from your email first.');return;}if(password!==confirm){setMessage('Passwords must match.');return;}setBusy(true);try{const {error}=await supabase.auth.updateUser({password});if(error)throw error;sessionStorage.removeItem('rescue-recovery');await navigate({to:'/dashboard',replace:true});}catch(err){setMessage(err instanceof Error?err.message:'Unable to update password.');}finally{setBusy(false);}}
+ return <div className="grid min-h-screen place-items-center bg-muted/40 px-4"><form onSubmit={submit} className="w-full max-w-md rounded-md border bg-background p-8"><Brand/><h1 className="mt-8 text-3xl font-semibold">Choose a new password</h1><p className="mt-2 text-sm text-muted-foreground">Use at least eight characters.</p>{!loading&&(!allowed||!user)&&<p className="mt-5 text-sm text-destructive" role="alert">Open the reset link from your email to continue.</p>}<div className="mt-6"><Label htmlFor="new-password">New password</Label><Input id="new-password" autoComplete="new-password" className="mt-1 h-11" type="password" minLength={8} maxLength={72} required value={password} onChange={e=>setPassword(e.target.value)}/></div><div className="mt-4"><Label htmlFor="confirm-password">Confirm new password</Label><Input id="confirm-password" autoComplete="new-password" className="mt-1 h-11" type="password" minLength={8} maxLength={72} required value={confirm} onChange={e=>setConfirm(e.target.value)}/></div>{message&&<p className="mt-4 text-sm" role="alert">{message}</p>}<Button disabled={busy||loading||!allowed||!user} className="mt-5 w-full">{busy?'Updating…':'Update password'}</Button><Button asChild variant="link" className="mt-2 w-full"><Link to="/auth">Return to sign in</Link></Button></form></div>;
+}
