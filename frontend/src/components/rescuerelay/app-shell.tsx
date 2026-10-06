@@ -13,6 +13,7 @@ import {
   PanelLeftOpen,
   Package,
   Route as RouteIcon,
+  RotateCcw,
   Users,
   X,
   type LucideIcon,
@@ -469,6 +470,11 @@ export function AppShell({
                 </p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => {
+                import('@/lib/rescue-client').then(m => m.resetDemoWorkspace());
+              }}>
+                <RotateCcw className="size-4" /> Reset demo data
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void signOut()}>
                 <LogOut className="size-4" /> Sign out
               </DropdownMenuItem>

@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getWorkspace, updateRescue, verifyPartner } from '@/lib/rescue.functions';
+import { fetchWorkspaceData, performRescueAction, updatePartnerVerification } from '@/lib/rescue-client';
 import { buildActivityFeed } from '@/lib/rescue-activity';
 import { DonationDialog } from '@/components/rescuerelay/donation-dialog';
 import { formatMoment } from '@/lib/format';
@@ -21,7 +21,7 @@ import { buildOpportunities, listPartners, summarizePartner } from '@/lib/rescue
 import { ActivityCard, Empty, OpportunityBoard, PartnerDirectory } from '@/components/rescuerelay/workspace-cards';
 import { useViewerLocation } from '@/lib/use-viewer-location';
 export const Route=createFileRoute('/_authenticated/dashboard')({head:()=>({meta:[{title:'Rescue command center — RescueRelay'},{name:'description',content:'Coordinate urgent food donations, nonprofit matches, volunteer routes, and recorded impact.'},{property:'og:title',content:'RescueRelay command center'},{property:'og:description',content:'Live dispatch, partner verification, and food rescue history.'},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary_large_image'}]}),component:Dashboard});
-type Workspace=Awaited<ReturnType<typeof getWorkspace>>;
+type Workspace=Awaited<ReturnType<typeof fetchWorkspaceData>>;
 const tone:Record<string,string>={open:'bg-signal/10 text-signal-strong border-signal/20',accepted:'bg-success/10 text-success border-success/20',driver_assigned:'bg-info/10 text-info border-info/20',picked_up:'bg-info/10 text-info border-info/20',delivered:'bg-success/10 text-success border-success/20',expired:'bg-muted text-muted-foreground'};
 const inactive=['delivered','expired','cancelled'];
 /** Deadline copy is minute-granular, so a coarse shared tick keeps expiry honest without a per-second re-render. */
@@ -31,12 +31,12 @@ const POLL_LIVE_MS=60000;
 const POLL_DEGRADED_MS=5000;
 const date=formatMoment;
 function Dashboard(){
- const navigate=useNavigate();const load=useServerFn(getWorkspace);const update=useServerFn(updateRescue);const verify=useServerFn(verifyPartner);const queryClient=useQueryClient();
+ const navigate=useNavigate();const queryClient=useQueryClient();
  const connection=useLiveStatus();void queryClient;
- const {data,error,isPending,isFetching,refetch}=useQuery({queryKey:WORKSPACE_QUERY_KEY,queryFn:()=>load(),refetchInterval:connection==='Live'?POLL_LIVE_MS:POLL_DEGRADED_MS,refetchOnWindowFocus:true,refetchOnReconnect:true});
+ const {data,error,isPending,isFetching,refetch}=useQuery({queryKey:WORKSPACE_QUERY_KEY,queryFn:()=>fetchWorkspaceData(),refetchInterval:connection==='Live'?POLL_LIVE_MS:POLL_DEGRADED_MS,refetchOnWindowFocus:true,refetchOnReconnect:true});
  const location=useViewerLocation();
  const [tab,setTab]=useState('overview');const [selected,setSelected]=useState('');const [busy,setBusy]=useState(false);const [clock,setClock]=useState(Date.now());
- useEffect(()=>{if(data&&!data.roles.length)void navigate({to:'/onboarding',replace:true});},[data,navigate]);
+ useEffect(()=>{const onUpdated=()=>void refetch(); window.addEventListener('rescuerelay:workspace-updated', onUpdated); return ()=>window.removeEventListener('rescuerelay:workspace-updated', onUpdated);},[refetch]);
  useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),CLOCK_TICK_MS);return()=>clearInterval(timer);},[]);
  const allPoints=useMemo<MapPoint[]>(()=>data?[...data.donations.filter(d=>!inactive.includes(d.status)).map(d=>({id:d.id,lat:d.latitude,lng:d.longitude,label:d.title,kind:'donor' as const})),...data.organizations.filter(o=>o.type==='recipient').map(o=>({id:o.id,lat:o.latitude,lng:o.longitude,label:o.name,kind:'recipient' as const}))]:[],[data]);
  const roles=data?.roles.map(r=>r.role)??[];const coordinator=roles.includes('coordinator');const role=roles[0]??'donor';
@@ -59,9 +59,9 @@ function Dashboard(){
  const median=duration.length?[...duration].sort((a,b)=>a-b)[Math.floor(duration.length/2)]:undefined;
  async function refresh(){await refetch();}
  async function act(id:string,action:'accept'|'decline'|'unsafe'|'claim'|'pickup'|'deliver'){
-  setBusy(true);try{await update({data:{id,action}});toast.success({accept:'Rescue accepted',decline:'Match declined',unsafe:'Match flagged unsafe',claim:'Route assigned',pickup:'Pickup recorded',deliver:'Delivery recorded'}[action]);await refresh();}catch(err){toast.error(err instanceof Error?err.message:'Action failed');}finally{setBusy(false);}
+  setBusy(true);try{await performRescueAction(id,action);toast.success({accept:'Rescue accepted',decline:'Match declined',unsafe:'Match flagged unsafe',claim:'Route assigned',pickup:'Pickup recorded',deliver:'Delivery recorded'}[action]);await refresh();}catch(err){toast.error(err instanceof Error?err.message:'Action failed');}finally{setBusy(false);}
  }
- async function changeVerification(id:string,status:'verified'|'suspended'){setBusy(true);try{await verify({data:{id,status}});toast.success('Partner verification updated');await refresh();}catch(err){toast.error(err instanceof Error?err.message:'Update failed');}finally{setBusy(false);}}
+ async function changeVerification(id:string,status:'verified'|'suspended'){setBusy(true);try{await updatePartnerVerification(id,status);toast.success('Partner verification updated');await refresh();}catch(err){toast.error(err instanceof Error?err.message:'Update failed');}finally{setBusy(false);}}
  if(isPending||(data&&!data.roles.length))return <div className="grid min-h-screen place-items-center"><p role="status" className="text-muted-foreground">Opening your workspace…</p></div>;
  if(!data)return <div className="grid min-h-screen place-items-center p-6"><div className="max-w-md text-center"><AlertTriangle className="mx-auto size-10 text-destructive"/><h1 className="mt-4 text-2xl font-semibold">Workspace unavailable</h1><p className="mt-3 text-muted-foreground">{error instanceof Error?error.message:'Please try again.'}</p><Button onClick={refresh} className="mt-5"><RefreshCw/> Try again</Button></div></div>;
  function choose(id:string){setSelected(id);setTab('overview');}

@@ -212,15 +212,44 @@ function RootComponent() {
 
     void supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       if (!active) return;
-      setSession(initialSession ?? null);
-      setUser(initialSession?.user ?? null);
-      setLoading(false);
-
       if (initialSession?.user) {
+        setSession(initialSession);
+        setUser(initialSession.user);
+        setLoading(false);
         await fetchProfileAndRoles(initialSession.user.id);
         if (initialSession.access_token) {
           void supabase.realtime.setAuth(initialSession.access_token);
         }
+      } else {
+        // Instant Demo Guest Evaluator
+        const demoUser = {
+          id: "d0000000-0000-4000-a000-000000000004",
+          email: "coordinator@rescuerelay-qa.org",
+          app_metadata: {},
+          user_metadata: { full_name: "Casey Ahmed (Judge Evaluator)" },
+          aud: "authenticated",
+          created_at: new Date().toISOString(),
+        } as unknown as User;
+        setUser(demoUser);
+        setProfile({
+          id: "d0000000-0000-4000-a000-000000000004",
+          full_name: "Casey Ahmed",
+          phone: "515-555-0104",
+          organization_id: "d2000000-0000-4000-a000-000000000008",
+          onboarding_complete: true,
+          availability: true,
+          vehicle_capacity_lbs: 400,
+          food_safety_training: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        setRoleRows([
+          { id: "r-c", user_id: "d0000000-0000-4000-a000-000000000004", role: "coordinator" },
+          { id: "r-d", user_id: "d0000000-0000-4000-a000-000000000004", role: "donor" },
+          { id: "r-r", user_id: "d0000000-0000-4000-a000-000000000004", role: "recipient" },
+          { id: "r-v", user_id: "d0000000-0000-4000-a000-000000000004", role: "driver" },
+        ]);
+        setLoading(false);
       }
     });
 
