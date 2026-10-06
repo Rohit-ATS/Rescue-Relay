@@ -1,0 +1,76 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791251697573,
+      "tag": "0000_create_rescuerelay_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791251714471,
+      "tag": "0001_add_rescuerelay_onboarding_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791251753168,
+      "tag": "0002_secure_proofs_and_coordinator_bootstrap",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791251870221,
+      "tag": "0003_add_secure_rescue_transitions",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791252028289,
+      "tag": "0004_tighten_function_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791252109858,
+      "tag": "0005_revoke_anonymous_function_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791252539729,
+      "tag": "0006_secure_live_rescue_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791252812180,
+      "tag": "0007_scope_rescue_workspace_reads",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791253959427,
+      "tag": "0008_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791254031737,
+      "tag": "0009_restrict_organization_visibility",
+      "breakpoints": true
+    }
+  ]
+}

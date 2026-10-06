@@ -1,0 +1,10 @@
+REVOKE EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.claim_initial_role(public.app_role, text, uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.respond_to_match(uuid, public.match_status) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.claim_delivery(uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.advance_delivery(uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.claim_initial_role(public.app_role, text, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.respond_to_match(uuid, public.match_status) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_delivery(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.advance_delivery(uuid, text) TO authenticated;
