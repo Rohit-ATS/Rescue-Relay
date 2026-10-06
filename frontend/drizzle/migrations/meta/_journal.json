@@ -85,6 +85,13 @@
       "when": 1791268846874,
       "tag": "0011_add_partner_contact_details",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791320400000,
+      "tag": "0012_social_agents",
+      "breakpoints": true
     }
   ]
 }
