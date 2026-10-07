@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchWorkspaceData, performRescueAction, updatePartnerVerification } from '@/lib/rescue-client';
 import { buildActivityFeed, type RescueActivity } from '@/lib/rescue-activity';
+import { fetchPublicFoodBanks, type PublicFoodBank } from '@/lib/food-banks';
 import { DonationDialog } from '@/components/rescuerelay/donation-dialog';
 import { formatMoment } from '@/lib/format';
 import { SlideSwap } from '@/components/rescuerelay/slide-swap';
@@ -36,6 +37,8 @@ const CLOCK_TICK_MS=15000;
 const POLL_LIVE_MS=60000;
 const POLL_DEGRADED_MS=5000;
 const date=formatMoment;
+/** Des Moines pilot centre, used to look up public food banks before a viewer shares a location. */
+const PILOT_CENTRE={latitude:41.5908,longitude:-93.6208};
 function Dashboard(){
  const navigate=useNavigate();const queryClient=useQueryClient();
  const connection=useLiveStatus();void queryClient;
@@ -47,7 +50,16 @@ function Dashboard(){
  useEffect(()=>{if(search?.tab)setTab(search.tab);},[search?.tab]);
  useEffect(()=>{const onUpdated=()=>void refetch(); window.addEventListener('rescuerelay:workspace-updated', onUpdated); return ()=>window.removeEventListener('rescuerelay:workspace-updated', onUpdated);},[refetch]);
  useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),CLOCK_TICK_MS);return()=>clearInterval(timer);},[]);
- const allPoints=useMemo<MapPoint[]>(()=>data?[...data.donations.filter(d=>!inactive.includes(d.status)).map(d=>({id:d.id,lat:d.latitude,lng:d.longitude,label:d.title,kind:'donor' as const})),...data.organizations.filter(o=>o.type==='recipient').map(o=>({id:o.id,lat:o.latitude,lng:o.longitude,label:o.name,kind:'recipient' as const}))]:[],[data]);
+ // Public food banks from OpenStreetMap. Fetched once per centre, and never
+ // allowed to fail loudly: an empty list just means the map shows partners only.
+ const [publicBanks,setPublicBanks]=useState<PublicFoodBank[]>([]);
+ const banksCentre=location.coords??PILOT_CENTRE;
+ useEffect(()=>{
+  const controller=new AbortController();
+  void fetchPublicFoodBanks(banksCentre.latitude,banksCentre.longitude,{signal:controller.signal}).then(setPublicBanks);
+  return()=>controller.abort();
+ },[banksCentre.latitude,banksCentre.longitude]);
+ const allPoints=useMemo<MapPoint[]>(()=>data?[...data.donations.filter(d=>!inactive.includes(d.status)).map(d=>({id:d.id,lat:d.latitude,lng:d.longitude,label:d.title,kind:'donor' as const})),...data.organizations.filter(o=>o.type==='recipient').map(o=>({id:o.id,lat:o.latitude,lng:o.longitude,label:o.name,kind:'recipient' as const})),...publicBanks.map(b=>({id:b.id,lat:b.latitude,lng:b.longitude,label:b.name,kind:'public' as const}))]:[],[data,publicBanks]);
  const roles=data?.roles.map(r=>r.role)??[];const coordinator=roles.includes('coordinator');const role=roles[0]??'donor';
  const available=data?.donations.filter(d=>!inactive.includes(d.status))??[];
  const active=data?.donations.find(d=>d.id===selected)??available[0]??data?.donations[0];

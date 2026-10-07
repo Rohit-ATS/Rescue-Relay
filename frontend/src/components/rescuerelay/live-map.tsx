@@ -54,7 +54,8 @@ export type MapPoint = {
   lat: number;
   lng: number;
   label: string;
-  kind: "donor" | "recipient";
+  /** "public" is an OpenStreetMap food bank: real, but not a verified partner. */
+  kind: "donor" | "recipient" | "public";
 };
 
 export type MapRoute = {
@@ -66,6 +67,8 @@ export type MapRoute = {
 const MARKER_COLORS = {
   donor: { fill: "#f2612b", ring: "#ffffff" },
   recipient: { fill: "#004c25", ring: "#ffffff" },
+  // Muted against the partner green, so signed-up partners still read first.
+  public: { fill: "#6b8f7a", ring: "#ffffff" },
 } as const;
 
 const MARKER_SIZE = 40;
@@ -319,14 +322,15 @@ export function LiveMap({
             map,
             title: p.label,
             icon: googleMarkerIcon(p.kind),
-            zIndex: p.kind === "donor" ? 2 : 1,
+            // Partners above public listings, pickups above both.
+            zIndex: p.kind === "donor" ? 3 : p.kind === "recipient" ? 2 : 1,
           });
           marker.addListener("click", () => {
             const externalLink = getGoogleMapsDirectionsUrl([p]);
             info.setContent(
               `<div style="font:500 13px/1.45 system-ui,sans-serif;color:#0a1b11;max-width:240px;padding:4px">` +
                 `<div style="font-weight:700;font-size:14px;margin-bottom:2px">${escapeHtml(p.label)}</div>` +
-                `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">${p.kind === "donor" ? "Pickup Location" : "Food Bank Partner"}</div>` +
+                `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">${p.kind === "donor" ? "Pickup Location" : p.kind === "recipient" ? "Food Bank Partner" : "Food Bank · OpenStreetMap"}</div>` +
                 `<a href="${externalLink}" target="_blank" rel="noreferrer" style="display:inline-block;color:#004c25;font-size:12px;font-weight:600;text-decoration:underline">Open in Google Maps →</a>` +
                 `</div>`,
             );
