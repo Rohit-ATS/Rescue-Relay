@@ -218,3 +218,4 @@ Generate the optimal post for ${spec.label}:`;
 ];
 
 Deno.serve(handleMcpRequest("mcp-mistral", "1.0.0", tools));
+
