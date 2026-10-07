@@ -119,5 +119,7 @@ Every platform MCP server runs as a standard Streamable HTTP JSON-RPC endpoint:
 | **X** | `/functions/v1/mcp-x` | `create_post`, `create_thread`, `list_mentions`, `reply` |
 | **Google Maps** | `/functions/v1/mcp-google-business` | `create_local_post`, `list_reviews`, `reply_to_review`, `update_hours` |
 
-You can also connect to these endpoints from external MCP clients (such as Claude Desktop or custom agents) using your Supabase anon/service key.
-
+External MCP clients must include a valid RescueRelay user bearer token. The
+server derives the organization from that identity; an `x-org-id` header may
+select another organization only for an authenticated coordinator. Server-side
+callers must provide the configured internal secret and an organization ID.

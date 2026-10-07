@@ -183,6 +183,47 @@ export type Database = {
           },
         ]
       }
+      organization_membership_requests: {
+        Row: {
+          id: string
+          organization_id: string
+          requested_at: string
+          requested_role: Database["public"]["Enums"]["app_role"]
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          requested_at?: string
+          requested_role: Database["public"]["Enums"]["app_role"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          requested_at?: string
+          requested_role?: Database["public"]["Enums"]["app_role"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_membership_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           accepted_categories: string[]
@@ -345,6 +386,18 @@ export type Database = {
           _organization_id?: string
           _role: Database["public"]["Enums"]["app_role"]
         }
+        Returns: undefined
+      }
+      request_organization_membership: {
+        Args: {
+          _full_name: string
+          _organization_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: undefined
+      }
+      approve_organization_membership_request: {
+        Args: { _request_id: string }
         Returns: undefined
       }
       has_role: {

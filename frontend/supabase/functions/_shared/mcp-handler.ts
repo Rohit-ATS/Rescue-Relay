@@ -1,6 +1,7 @@
 // Standard MCP Streamable JSON-RPC HTTP transport handler for Supabase Edge Functions.
 
-import { corsHeaders, json } from "../_shared/http.ts";
+import { corsHeaders, HttpError, json } from "../_shared/http.ts";
+import { resolveCaller } from "../_shared/auth.ts";
 
 export interface McpTool {
   name: string;
@@ -19,7 +20,10 @@ export function handleMcpRequest(serverName: string, version: string, tools: Mcp
       return json({ error: "Method not allowed. MCP server accepts POST JSON-RPC requests." }, 405);
     }
 
-    const orgId = req.headers.get("x-org-id") || "";
+    // A coordinator may select a different organization, but the selection is
+    // always validated by resolveCaller before a tool can use it. Regular
+    // members are bound to their own organization.
+    const requestedOrgId = req.headers.get("x-org-id");
     const dryRun = req.headers.get("x-dry-run") === "true";
 
     let body: any;
@@ -69,6 +73,23 @@ export function handleMcpRequest(serverName: string, version: string, tools: Mcp
 
     // 4. Call tool
     if (method === "tools/call") {
+      let caller;
+      try {
+        caller = await resolveCaller(req, requestedOrgId);
+      } catch (error) {
+        const status = error instanceof HttpError ? error.status : 500;
+        return json(
+          {
+            jsonrpc: "2.0",
+            id: id ?? null,
+            error: {
+              code: -32001,
+              message: error instanceof Error ? error.message : "Unauthorized",
+            },
+          },
+          status,
+        );
+      }
       const toolName = params?.name;
       const toolArgs = params?.arguments || {};
       const targetTool = tools.find((t) => t.name === toolName);
@@ -82,7 +103,7 @@ export function handleMcpRequest(serverName: string, version: string, tools: Mcp
       }
 
       try {
-        const toolOutput = await targetTool.handler(toolArgs, { orgId, dryRun });
+        const toolOutput = await targetTool.handler(toolArgs, { orgId: caller.orgId, dryRun });
         return json({
           jsonrpc: "2.0",
           id,
@@ -120,4 +141,3 @@ export function handleMcpRequest(serverName: string, version: string, tools: Mcp
     });
   };
 }
-

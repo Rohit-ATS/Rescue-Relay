@@ -62,11 +62,38 @@ serve(async (req) => {
   // 2. Fetch rescue/donation data if provided
   let rescueFacts: RescueFacts | null = null;
   if (body.donation_id) {
+    // Establish the caller's relationship before loading private rescue facts
+    // with the service-role client. Coordinators retain their cross-org view.
+    const { data: donationRef, error: refErr } = await db
+      .from("donations")
+      .select("id, donor_org_id")
+      .eq("id", body.donation_id)
+      .maybeSingle();
+    if (refErr) throw new HttpError(500, `Could not load donation: ${refErr.message}`);
+    if (!donationRef) throw new HttpError(404, "Donation not found");
+
+    let canUseDonation = caller.isCoordinator || donationRef.donor_org_id === orgId;
+    if (!canUseDonation) {
+      const { data: recipientMatch, error: matchErr } = await db
+        .from("matches")
+        .select("id")
+        .eq("donation_id", donationRef.id)
+        .eq("recipient_org_id", orgId)
+        .limit(1)
+        .maybeSingle();
+      if (matchErr) throw new HttpError(500, `Could not authorize donation: ${matchErr.message}`);
+      canUseDonation = Boolean(recipientMatch);
+    }
+    if (!canUseDonation) {
+      throw new HttpError(403, "Donation is not available to this organization");
+    }
+
     const { data: dData, error: dErr } = await db
       .from("donations")
       .select("id, title, category, pounds, servings, pickup_address, pickup_deadline, storage_required, allergens, notes, status, donor_org_id")
       .eq("id", body.donation_id)
       .maybeSingle();
+    if (dErr) throw new HttpError(500, `Could not load donation: ${dErr.message}`);
 
     if (dData) {
       let donorName: string | null = null;
@@ -213,4 +240,3 @@ serve(async (req) => {
     drafts: draftsCreated,
   });
 });
-

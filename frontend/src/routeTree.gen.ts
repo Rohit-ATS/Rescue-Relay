@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated.dashboard'
+import { Route as AuthenticatedMembershipsRouteImport } from './routes/_authenticated.memberships'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated.onboarding'
 import { Route as AuthenticatedWorkflowsRouteImport } from './routes/_authenticated.workflows'
 
@@ -41,6 +42,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMembershipsRoute =
+  AuthenticatedMembershipsRouteImport.update({
+    id: '/memberships',
+    path: '/memberships',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/memberships': typeof AuthenticatedMembershipsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/workflows': typeof AuthenticatedWorkflowsRoute
 }
@@ -65,6 +73,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/memberships': typeof AuthenticatedMembershipsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/workflows': typeof AuthenticatedWorkflowsRoute
 }
@@ -75,6 +84,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/memberships': typeof AuthenticatedMembershipsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/workflows': typeof AuthenticatedWorkflowsRoute
 }
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/dashboard'
+    | '/memberships'
     | '/onboarding'
     | '/workflows'
   fileRoutesByTo: FileRoutesByTo
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/dashboard'
+    | '/memberships'
     | '/onboarding'
     | '/workflows'
   id:
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/_authenticated/dashboard'
+    | '/_authenticated/memberships'
     | '/_authenticated/onboarding'
     | '/_authenticated/workflows'
   fileRoutesById: FileRoutesById
@@ -150,6 +163,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/memberships': {
+      id: '/_authenticated/memberships'
+      path: '/memberships'
+      fullPath: '/memberships'
+      preLoaderRoute: typeof AuthenticatedMembershipsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/onboarding': {
       id: '/_authenticated/onboarding'
       path: '/onboarding'
@@ -169,12 +189,14 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedMembershipsRoute: typeof AuthenticatedMembershipsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedWorkflowsRoute: typeof AuthenticatedWorkflowsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedMembershipsRoute: AuthenticatedMembershipsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedWorkflowsRoute: AuthenticatedWorkflowsRoute,
 }

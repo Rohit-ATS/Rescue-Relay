@@ -14,4 +14,17 @@ export const donationSchema = z.object({
 export const onboardingSchema = z.object({
   fullName: z.string().trim().min(2).max(100),
   role: z.enum(["donor", "recipient", "driver", "coordinator"]),
+  organizationId: z.string().uuid().optional(),
+}).superRefine((input, ctx) => {
+  const needsOrganization = input.role === "donor" || input.role === "recipient";
+  if (needsOrganization && !input.organizationId) {
+    ctx.addIssue({ code: "custom", path: ["organizationId"], message: "Choose your organization" });
+  }
+  if (!needsOrganization && input.organizationId) {
+    ctx.addIssue({ code: "custom", path: ["organizationId"], message: "This role does not join an organization" });
+  }
+});
+
+export const membershipRequestIdSchema = z.object({
+  requestId: z.string().uuid(),
 });

@@ -1,6 +1,6 @@
-// Sweep edge function for Community Inbox: checks mentions, reviews and comments across all accounts and creates pending inbox items.
+// Sweep edge function for Community Inbox: checks mentions, reviews and comments for one organization and creates pending inbox items.
 
-import { adminClient } from "../_shared/auth.ts";
+import { adminClient, resolveCaller } from "../_shared/auth.ts";
 import { HttpError, json, serve } from "../_shared/http.ts";
 import { loadConnection } from "../_shared/providers/index.ts";
 import { gbpListReviews } from "../_shared/providers/google-business.ts";
@@ -9,13 +9,22 @@ import { linkedinListComments } from "../_shared/providers/linkedin.ts";
 import { xListMentions } from "../_shared/providers/x.ts";
 
 serve(async (req) => {
+  if (req.method !== "POST") {
+    throw new HttpError(405, "Method not allowed. Use POST.");
+  }
+
   const db = adminClient();
   const url = new URL(req.url);
-  const targetOrgId = url.searchParams.get("org_id");
+  const requestedOrgId = url.searchParams.get("org_id") ?? req.headers.get("x-org-id");
 
-  // Query connected social accounts
-  let query = db.from("social_accounts").select("id, org_id, platform, handle, external_id").eq("status", "connected");
-  if (targetOrgId) query = query.eq("org_id", targetOrgId);
+  // resolveCaller accepts internal calls only with both the internal secret and
+  // an organization ID. Every sweep is therefore scoped to one tenant.
+  const caller = await resolveCaller(req, requestedOrgId);
+  const query = db
+    .from("social_accounts")
+    .select("id, org_id, platform, handle, external_id")
+    .eq("status", "connected")
+    .eq("org_id", caller.orgId);
 
   const { data: accounts, error } = await query;
   if (error) throw new HttpError(500, `Failed to load accounts: ${error.message}`);
@@ -104,4 +113,3 @@ serve(async (req) => {
     newInboxItems: itemsFound,
   });
 });
-

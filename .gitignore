@@ -28,6 +28,7 @@ frontend/.nitro/
 # Environment
 *.local
 .env.local
+frontend/.env
 
 # Editor directories and files
 .vscode/*
@@ -39,4 +40,3 @@ frontend/.nitro/
 *.njsproj
 *.sln
 *.sw?
-

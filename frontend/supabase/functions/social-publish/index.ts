@@ -32,22 +32,37 @@ serve(async (req) => {
   }
 
   // 2. Authorize caller against the organization
-  const caller = await resolveCaller(req, post.org_id);
+  await resolveCaller(req, post.org_id);
 
-  // 3. Status checks: must be approved or pending_approval
+  // 3. Claim the post atomically. Approval is required by default, but an
+  // organization can explicitly opt out through its settings.
   if (post.status === "published") {
     return json({ success: true, message: "Post was already published", post });
   }
 
-  // Auto-mark approved if caller explicitly executes publish
-  await db
+  const { data: settings, error: settingsErr } = await db
+    .from("social_settings")
+    .select("require_approval")
+    .eq("org_id", post.org_id)
+    .maybeSingle();
+  if (settingsErr) throw new HttpError(500, `Could not load publishing settings: ${settingsErr.message}`);
+
+  const allowedStatuses = settings?.require_approval === false
+    ? ["pending_approval", "approved"]
+    : ["approved"];
+  const { data: claimedPost, error: claimErr } = await db
     .from("social_posts")
     .update({
       status: "publishing",
-      approved_by: caller.userId || post.approved_by,
-      approved_at: post.approved_at || new Date().toISOString(),
+      approved_by: post.approved_by,
+      approved_at: post.approved_at,
     })
-    .eq("id", postId);
+    .eq("id", postId)
+    .in("status", allowedStatuses)
+    .select("id")
+    .maybeSingle();
+  if (claimErr) throw new HttpError(500, `Could not claim post for publishing: ${claimErr.message}`);
+  if (!claimedPost) throw new HttpError(409, "Post is not approved for publishing");
 
   const platform: SocialPlatform = post.platform;
   const content = post.content;
@@ -135,4 +150,3 @@ serve(async (req) => {
     throw new HttpError(500, `Failed to publish to ${platform}: ${pubErr.message}`);
   }
 });
-

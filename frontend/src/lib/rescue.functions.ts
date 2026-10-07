@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { donationSchema, onboardingSchema } from "@/lib/rescue-schemas";
+import { donationSchema, membershipRequestIdSchema, onboardingSchema } from "@/lib/rescue-schemas";
 import { scoreRescue } from "@/lib/rescue-scoring";
 import { distanceMiles as haversineMiles } from "@/lib/geo";
 import { z } from 'zod';
@@ -8,22 +8,24 @@ import { z } from 'zod';
 export const getWorkspace = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const [profileResult, rolesResult, donationsResult, organizationsResult, matchesResult, deliveriesResult, eventsResult] = await Promise.all([
+    const [profileResult, rolesResult, donationsResult, organizationsResult, membershipRequestsResult, matchesResult, deliveriesResult, eventsResult] = await Promise.all([
       context.supabase.from("profiles").select("*").eq("id", context.userId).maybeSingle(),
       context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
       context.supabase.from("donations").select("*").order("pickup_deadline"),
       context.supabase.from("organizations").select("*").order("name"),
+      context.supabase.from("organization_membership_requests").select("*").eq("user_id", context.userId).maybeSingle(),
       context.supabase.from("matches").select("*").order("score", { ascending: false }),
       context.supabase.from("deliveries").select("*").order("created_at", { ascending: false }),
       context.supabase.from("rescue_events").select("*").order("created_at", { ascending: false }).limit(20),
     ]);
-    const firstError = [profileResult, rolesResult, donationsResult, organizationsResult, matchesResult, deliveriesResult, eventsResult].find((result) => result.error)?.error;
+    const firstError = [profileResult, rolesResult, donationsResult, organizationsResult, membershipRequestsResult, matchesResult, deliveriesResult, eventsResult].find((result) => result.error)?.error;
     if (firstError) throw new Error(firstError.message);
     return {
       profile: profileResult.data,
       roles: rolesResult.data ?? [],
       donations: donationsResult.data ?? [],
       organizations: organizationsResult.data ?? [],
+      membershipRequest: membershipRequestsResult.data,
       matches: matchesResult.data ?? [],
       deliveries: deliveriesResult.data ?? [],
       events: eventsResult.data ?? [],
@@ -35,10 +37,55 @@ export const completeOnboarding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => onboardingSchema.parse(input))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.rpc("claim_initial_role", {
-      _full_name: data.fullName,
-      _role: data.role,
-    });
+    const requestMembership = data.role === "donor" || data.role === "recipient";
+    const { error } = requestMembership
+      ? await context.supabase.rpc("request_organization_membership", {
+        _full_name: data.fullName,
+        _organization_id: data.organizationId!,
+        _role: data.role,
+      })
+      : await context.supabase.rpc("claim_initial_role", {
+        _full_name: data.fullName,
+        _role: data.role,
+      });
+    if (error) throw new Error(error.message);
+    return { ok: true, pendingApproval: requestMembership };
+  });
+
+export const getPendingMembershipRequests = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: isCoordinator, error: roleError } = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "coordinator" });
+    if (roleError || !isCoordinator) throw new Error("Coordinator access required.");
+
+    const { data: requests, error: requestsError } = await context.supabase
+      .from("organization_membership_requests")
+      .select("id, user_id, organization_id, requested_role, requested_at")
+      .eq("status", "pending")
+      .order("requested_at");
+    if (requestsError) throw new Error(requestsError.message);
+
+    const userIds = (requests ?? []).map((request) => request.user_id);
+    const organizationIds = (requests ?? []).map((request) => request.organization_id);
+    const [profilesResult, organizationsResult] = await Promise.all([
+      userIds.length ? context.supabase.from("profiles").select("id, full_name").in("id", userIds) : Promise.resolve({ data: [], error: null }),
+      organizationIds.length ? context.supabase.from("organizations").select("id, name").in("id", organizationIds) : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (profilesResult.error || organizationsResult.error) throw new Error(profilesResult.error?.message ?? organizationsResult.error?.message);
+    const namesByUser = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.full_name]));
+    const namesByOrganization = new Map((organizationsResult.data ?? []).map((organization) => [organization.id, organization.name]));
+    return (requests ?? []).map((request) => ({
+      ...request,
+      requesterName: namesByUser.get(request.user_id) ?? "Pending user",
+      organizationName: namesByOrganization.get(request.organization_id) ?? "Unknown organization",
+    }));
+  });
+
+export const approveMembershipRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => membershipRequestIdSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("approve_organization_membership_request", { _request_id: data.requestId });
     if (error) throw new Error(error.message);
     return { ok: true };
   });
