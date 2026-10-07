@@ -490,7 +490,7 @@ export function LiveMap({
       )}
 
       {ready && (
-        <div className="absolute bottom-3 left-3 z-[1000] rounded-md border bg-background/95 px-3 py-2 text-xs shadow-sm backdrop-blur-sm">
+        <div className="absolute bottom-3 left-3 z-[1000] max-w-[min(18rem,calc(100%-1.5rem))] rounded-md border bg-background/95 px-2.5 py-1.5 text-[11px] leading-tight shadow-sm backdrop-blur-sm">
           {points.length === 1 && points[0] ? (
             <p className="flex items-center gap-1.5 font-medium">
               <span
@@ -502,40 +502,37 @@ export function LiveMap({
             </p>
           ) : points.length ? (
             <>
-              <p className="font-semibold">
-                {pickupCount} pickup{pickupCount === 1 ? "" : "s"} · {dropoffCount} food bank
-                {dropoffCount === 1 ? "" : "s"}
-              </p>
-              {/* Without a Maps key the embed can plot a single point only, so a
-                  count here would otherwise promise pins the map cannot draw. */}
-              {embedded && points.length > 1 && (
-                <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                  Showing one combined marker. Add a Google Maps key to plot all {points.length}{" "}
-                  locations.
-                </p>
-              )}
-              <ul className="mt-1.5 space-y-1">
+              {/* Counts carry their own swatch, so the key and the tally are one
+                  line instead of a heading above a list. */}
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-medium">
                 {pickupCount > 0 && (
-                  <li className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-1.5">
                     <span
                       aria-hidden="true"
-                      className="size-2.5 rounded-full"
+                      className="size-2 shrink-0 rounded-full"
                       style={{ backgroundColor: MARKER_COLORS.donor.fill }}
                     />
-                    Pickup location
-                  </li>
+                    {pickupCount} pickup{pickupCount === 1 ? "" : "s"}
+                  </span>
                 )}
                 {dropoffCount > 0 && (
-                  <li className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-1.5">
                     <span
                       aria-hidden="true"
-                      className="size-2.5 rounded-full"
+                      className="size-2 shrink-0 rounded-full"
                       style={{ backgroundColor: MARKER_COLORS.recipient.fill }}
                     />
-                    Food bank
-                  </li>
+                    {dropoffCount} food bank{dropoffCount === 1 ? "" : "s"}
+                  </span>
                 )}
-              </ul>
+              </p>
+              {/* Without a Maps key the embed plots one point, so a count alone
+                  would promise pins the map cannot draw. */}
+              {embedded && points.length > 1 && (
+                <p className="mt-1 text-muted-foreground">
+                  1 of {points.length} shown · needs a Maps key
+                </p>
+              )}
             </>
           ) : (
             <p className="font-medium">

@@ -117,10 +117,21 @@ describe("LiveMap", () => {
     expect(screen.queryByText(/0 food banks/)).not.toBeInTheDocument();
   });
 
+  // Each count carries its own swatch, so the two are separate elements rather
+  // than one run of text.
   it("counts both kinds when several locations are shown", async () => {
     render(<LiveMap points={[{ ...PICKUP }, { ...BANK }]} />);
 
-    expect(await screen.findByText(/1 pickup · 1 food bank/)).toBeInTheDocument();
+    expect(await screen.findByText("1 pickup")).toBeInTheDocument();
+    expect(screen.getByText("1 food bank")).toBeInTheDocument();
+  });
+
+  // Without a key the embed plots one point, so the legend must not imply more.
+  it("says how many locations the keyless map is leaving out", async () => {
+    vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "");
+    render(<LiveMap points={[{ ...PICKUP }, { ...BANK }]} />);
+
+    expect(await screen.findByText(/1 of 2 shown/)).toBeInTheDocument();
   });
 
   it("renders Google Maps Embed when no Google key is configured", async () => {
