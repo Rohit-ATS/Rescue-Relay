@@ -3,6 +3,7 @@
 import { adminClient, resolveCaller } from "../_shared/auth.ts";
 import { HttpError, json, serve } from "../_shared/http.ts";
 import { loadConnection } from "../_shared/providers/index.ts";
+import { facebookCreatePhotoPost, facebookCreatePost } from "../_shared/providers/facebook.ts";
 import { gbpCreateLocalPost } from "../_shared/providers/google-business.ts";
 import { instagramPublish } from "../_shared/providers/instagram.ts";
 import { linkedinCreatePost } from "../_shared/providers/linkedin.ts";
@@ -117,6 +118,14 @@ serve(async (req) => {
       result = await xCreatePost(conn, content);
     } else if (platform === "google_business") {
       result = await gbpCreateLocalPost(conn, { summary: content, topicType: "STANDARD" });
+    } else if (platform === "facebook") {
+      if (imageUrl) {
+        const fbRes = await facebookCreatePhotoPost(conn, imageUrl, content);
+        result = { id: fbRes.postId, url: fbRes.url };
+      } else {
+        const fbRes = await facebookCreatePost(conn, content);
+        result = { id: fbRes.postId, url: fbRes.url };
+      }
     }
 
     await db

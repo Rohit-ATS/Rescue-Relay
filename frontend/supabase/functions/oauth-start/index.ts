@@ -16,7 +16,7 @@ serve(async (req) => {
   const returnTo = url.searchParams.get("return_to") || `${appUrl()}/dashboard?section=workflows`;
 
   if (!isSocialPlatform(platform)) {
-    throw new HttpError(400, "Valid platform required: linkedin, instagram, x, google_business");
+    throw new HttpError(400, "Valid platform required: linkedin, instagram, x, google_business, facebook");
   }
 
   const caller = await resolveCaller(req);

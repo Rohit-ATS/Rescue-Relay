@@ -36,7 +36,7 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     description:
       "Alerts local residents, neighborhood groups, and families when fresh or prepared surplus arrives for free distribution.",
     tone: "community",
-    defaultPlatforms: ["instagram", "google_business", "x"],
+    defaultPlatforms: ["instagram", "google_business", "x", "facebook"],
     defaultSignoff: "All are welcome. No ID or paperwork required. First-come, first-served.",
     kind: "broadcast",
     brief:
@@ -49,7 +49,7 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     description:
       "Triggers instant alerts when high-value refrigerated items or prepared meals need to be claimed within 3 hours.",
     tone: "urgent",
-    defaultPlatforms: ["x", "google_business"],
+    defaultPlatforms: ["x", "google_business", "facebook"],
     defaultSignoff: "Please bring your own cold-totes or containers if possible!",
     kind: "broadcast",
     brief:
@@ -62,7 +62,7 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     description:
       "Informs nearby soup kitchens, youth shelters, and mutual aid partners when donations exceed on-site cold storage capacity.",
     tone: "partner",
-    defaultPlatforms: ["linkedin"],
+    defaultPlatforms: ["linkedin", "facebook"],
     defaultSignoff: "Cross-docking and volunteer pickup assistance available on request.",
     kind: "broadcast",
     brief:
@@ -75,7 +75,7 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     description:
       "Celebrates donors, shares verified rescued meal counts, and inspires local grocers and restaurants to join RescueRelay.",
     tone: "storyteller",
-    defaultPlatforms: ["linkedin", "instagram"],
+    defaultPlatforms: ["linkedin", "instagram", "facebook"],
     defaultSignoff: "Together, we make sure good food reaches tables instead of landfills.",
     kind: "broadcast",
     brief:
@@ -88,7 +88,7 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     description:
       "Reads new comments, mentions and Google Maps reviews across connected accounts and drafts friendly, accurate replies for approval.",
     tone: "helpful",
-    defaultPlatforms: ["instagram", "x", "linkedin", "google_business"],
+    defaultPlatforms: ["instagram", "x", "linkedin", "google_business", "facebook"],
     defaultSignoff: "",
     kind: "inbox",
     brief:
