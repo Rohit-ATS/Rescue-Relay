@@ -25,34 +25,9 @@ import { publishWorkspace, startDemoSync } from "@/lib/demo-broadcast";
 const STORAGE_KEY = "rescuerelay-demo-workspace-v1";
 const REALTIME_CHANNEL = "rescue-relay-live-stream";
 
-function getStoredWorkspace(): WorkspaceData {
-  if (typeof window === "undefined") {
-    return {
-      profile: INITIAL_PROFILES[0] ?? null,
-      roles: INITIAL_ROLES,
-      donations: getInitialDonations(),
-      organizations: INITIAL_ORGANIZATIONS,
-      matches: getInitialMatches(),
-      deliveries: getInitialDeliveries(),
-      events: getInitialEvents(),
-      membershipRequests: getInitialMembershipRequests(),
-      userId: DEMO_USER_ID,
-    };
-  }
-
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.donations) && parsed.donations.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.warn("[Demo Workspace] Failed to parse local workspace:", err);
-  }
-
-  const initial: WorkspaceData = {
+/** A workspace with every collection present, used as the base for anything we load. */
+function freshWorkspace(): WorkspaceData {
+  return {
     profile: INITIAL_PROFILES[0] ?? null,
     roles: INITIAL_ROLES,
     donations: getInitialDonations(),
@@ -63,6 +38,68 @@ function getStoredWorkspace(): WorkspaceData {
     membershipRequests: getInitialMembershipRequests(),
     userId: DEMO_USER_ID,
   };
+}
+
+/**
+ * Fills in anything a stored or received workspace is missing.
+ *
+ * Two inputs are outside our control: a workspace saved by an older build of this app,
+ * and a snapshot broadcast by another screen that may be running a different build. Both
+ * were written through verbatim, so a collection added later arrived as `undefined` and
+ * the first `.filter` or `.map` over it took the whole page down. Normalising here means
+ * a field added in future cannot break a screen that has older state.
+ */
+function normalizeWorkspace(input: unknown): WorkspaceData {
+  const base = freshWorkspace();
+  if (!input || typeof input !== "object") return base;
+  const partial = input as Partial<WorkspaceData>;
+
+  const array = <T,>(value: unknown, fallback: T[]): T[] => (Array.isArray(value) ? (value as T[]) : fallback);
+
+  /**
+   * Drops records that are missing the keys every screen dereferences.
+   *
+   * The sync channel is shared and unauthenticated, so a snapshot can arrive from a
+   * client on a different build. One donation without a `status` was enough to throw
+   * from the activity feed and blank the whole dashboard.
+   */
+  const wellFormed = <T,>(rows: unknown, keys: string[], fallback: T[]): T[] => {
+    if (!Array.isArray(rows)) return fallback;
+    const kept = rows.filter(
+      (row) => row && typeof row === "object" && keys.every((key) => (row as Record<string, unknown>)[key] != null),
+    );
+    return kept as T[];
+  };
+
+  return {
+    profile: partial.profile ?? base.profile,
+    roles: array(partial.roles, base.roles),
+    donations: wellFormed(partial.donations, ["id", "status", "pickup_deadline"], base.donations),
+    organizations: wellFormed(partial.organizations, ["id", "name", "type"], base.organizations),
+    matches: wellFormed(partial.matches, ["id", "donation_id", "status"], base.matches),
+    deliveries: wellFormed(partial.deliveries, ["id", "match_id"], base.deliveries),
+    events: array(partial.events, base.events),
+    membershipRequests: array(partial.membershipRequests, base.membershipRequests),
+    userId: typeof partial.userId === "string" && partial.userId ? partial.userId : base.userId,
+  };
+}
+
+function getStoredWorkspace(): WorkspaceData {
+  if (typeof window === "undefined") return freshWorkspace();
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.donations) && parsed.donations.length > 0) {
+        return normalizeWorkspace(parsed);
+      }
+    }
+  } catch (err) {
+    console.warn("[Demo Workspace] Failed to parse local workspace:", err);
+  }
+
+  const initial = freshWorkspace();
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
   } catch {}
@@ -97,7 +134,8 @@ function saveWorkspace(data: WorkspaceData) {
 function applyRemoteWorkspace(data: WorkspaceData) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    // The sending screen may be running an older build, so never trust its shape.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeWorkspace(data)));
     window.dispatchEvent(new CustomEvent("rescuerelay:workspace-updated"));
   } catch (err) {
     console.warn("[Demo Workspace] Failed to apply shared workspace:", err);

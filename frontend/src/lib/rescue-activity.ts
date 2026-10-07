@@ -86,7 +86,8 @@ const STAGE_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-function stageLabel(status: string): string {
+function stageLabel(status: string | null | undefined): string {
+  if (!status) return "Status unknown";
   return STAGE_LABELS[status] ?? status.replaceAll("_", " ");
 }
 

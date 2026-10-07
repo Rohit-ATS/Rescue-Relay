@@ -52,3 +52,49 @@ describe("Membership requests on a static host", () => {
     expect(await approveMembershipRequestLocally("no-such-request")).toEqual({ ok: false });
   });
 });
+
+describe("Workspace hydration tolerates older state", () => {
+  const KEY = "rescuerelay-demo-workspace-v1";
+
+  it("fills in collections a workspace saved by an older build is missing", async () => {
+    // Exactly what broke the deployed dashboard: a v1 workspace stored before
+    // membershipRequests existed was written through verbatim, so the first read of
+    // it was undefined and the page died on `.filter`.
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ donations: [{ id: "d1", status: "open" }], userId: "someone" }),
+    );
+
+    const requests = await fetchPendingMembershipRequests();
+    expect(Array.isArray(requests)).toBe(true);
+  });
+
+  it("does not lose the donations an older workspace did carry", async () => {
+    const { fetchWorkspaceData } = await import("@/lib/rescue-client");
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ donations: [{ id: "kept-donation", status: "open" }], userId: "someone" }),
+    );
+
+    const workspace = await fetchWorkspaceData();
+    expect(workspace.donations.map((d) => d.id)).toContain("kept-donation");
+    expect(workspace.userId).toBe("someone");
+    // Every collection is present, whatever the stored shape was.
+    for (const key of ["roles", "organizations", "matches", "deliveries", "events", "membershipRequests"] as const) {
+      expect(Array.isArray(workspace[key])).toBe(true);
+    }
+  });
+
+  it("survives a stored workspace whose collections are the wrong type", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ donations: [{ id: "d1" }], roles: "not-an-array", events: null, membershipRequests: 7 }),
+    );
+
+    const { fetchWorkspaceData } = await import("@/lib/rescue-client");
+    const workspace = await fetchWorkspaceData();
+    expect(Array.isArray(workspace.roles)).toBe(true);
+    expect(Array.isArray(workspace.events)).toBe(true);
+    expect(Array.isArray(workspace.membershipRequests)).toBe(true);
+  });
+});
