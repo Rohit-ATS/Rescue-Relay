@@ -20,6 +20,8 @@ import {
   type Organization,
 } from "./demo-store";
 
+import { publishWorkspace, startDemoSync } from "@/lib/demo-broadcast";
+
 const STORAGE_KEY = "rescuerelay-demo-workspace-v1";
 const REALTIME_CHANNEL = "rescue-relay-live-stream";
 
@@ -76,6 +78,46 @@ function saveWorkspace(data: WorkspaceData) {
   } catch (err) {
     console.warn("[Demo Workspace] Failed to save workspace:", err);
   }
+  // ...and across browsers. Without a session every write stays in this one
+  // localStorage, so the demo channel is what carries it to the other screens.
+  ensureDemoSync();
+  try {
+    publishWorkspace(data);
+  } catch (err) {
+    console.warn("[Demo Workspace] Could not share workspace:", err);
+  }
+}
+
+/**
+ * Writes a workspace that arrived from another screen.
+ *
+ * Deliberately not saveWorkspace: that publishes, and a received snapshot
+ * published straight back would have the two screens answering each other.
+ */
+function applyRemoteWorkspace(data: WorkspaceData) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    window.dispatchEvent(new CustomEvent("rescuerelay:workspace-updated"));
+  } catch (err) {
+    console.warn("[Demo Workspace] Failed to apply shared workspace:", err);
+  }
+}
+
+/**
+ * Joins the shared channel the first time the store is actually used.
+ *
+ * Not done on import: that touches the Supabase client, which throws where its
+ * environment is not configured, and would take the store down with it. Sharing
+ * is a convenience, so it fails quietly and leaves the workspace working.
+ */
+function ensureDemoSync() {
+  if (typeof window === "undefined") return;
+  try {
+    startDemoSync({ read: getStoredWorkspace, write: applyRemoteWorkspace });
+  } catch (err) {
+    console.warn("[Demo Workspace] Sharing unavailable:", err);
+  }
 }
 
 /**
@@ -84,6 +126,8 @@ function saveWorkspace(data: WorkspaceData) {
  * Otherwise, uses the interactive local store that persists live actions.
  */
 export async function fetchWorkspaceData(): Promise<WorkspaceData> {
+  // A screen that never writes still needs to receive what the others post.
+  ensureDemoSync();
   try {
     const [donationsRes, orgsRes, matchesRes, deliveriesRes, eventsRes] = await Promise.all([
       supabase.from("donations").select("*").order("pickup_deadline"),
