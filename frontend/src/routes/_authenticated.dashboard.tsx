@@ -107,7 +107,37 @@ function Dashboard(){
   </div>
  </div>
  </TabsContent>
- <TabsContent value="route" className="mt-6"><div className="grid gap-6 xl:grid-cols-2"><LiveMap points={detailPoints} route={detailRoute}/><SlideSwap swapKey={active?.id??'none'}><section>{active&&accepted?<><p className="text-xs font-bold uppercase text-primary">{delivery?'Delivery handoff':'Available assignment'}</p><h2 className="mt-2 text-2xl font-semibold">{active.title}</h2><div className="mt-6 space-y-5 border-y py-5"><Stop title="Pickup" detail={active.pickup_address} time={delivery?.picked_up_at}/><Stop title="Delivery" detail={recipient?.name??'Recipient'} time={delivery?.delivered_at}/></div><p className="mt-4 text-sm text-muted-foreground">{Number(active.pounds)} lb · {active.storage_required}</p><p className="mt-3 text-sm">Driver: {delivery?.driver_name||'Not yet assigned'}</p><p className="mt-4 border-l-2 border-info pl-3 text-sm leading-6 text-muted-foreground">Follow your organization’s food-safety policy. Pickup confirmation acknowledges that you checked the handling requirements.</p>{!delivery?.driver_user_id&&!delivery?.picked_up_at&&(role==='driver'||coordinator)&&<Button className="mt-5" disabled={busy||deadline<clock} onClick={()=>act(accepted.id,'claim')}><Truck/> Claim route</Button>}{delivery&&canHandoff&&<div className="mt-5 flex flex-wrap gap-2"><Button disabled={busy||Boolean(delivery.picked_up_at)} onClick={()=>act(delivery.id,'pickup')}><Check/> Confirm safe pickup</Button><Button disabled={busy||!delivery.picked_up_at||Boolean(delivery.delivered_at)} onClick={()=>act(delivery.id,'deliver')}><PackageCheck/> Confirm delivery</Button></div>}{delivery?.driver_user_id&&!canHandoff&&<p className="mt-5 text-sm text-muted-foreground">The assigned driver records this handoff.</p>}</>:<Empty title="No accepted route selected" copy="Choose an accepted rescue from the relay board to view its delivery."/>}<div className="mt-8"><h3 className="font-semibold">Accepted rescues</h3>{data.matches.filter(m=>m.status==='accepted').map(m=>{const d=data.donations.find(d=>d.id===m.donation_id);return d?<Button key={m.id} variant="ghost" className="mt-2 h-auto w-full justify-start whitespace-normal text-left" onClick={()=>setSelected(d.id)}>{d.title}<ArrowRight/></Button>:null;})}</div></section></SlideSwap></div></TabsContent>
+ <TabsContent value="route" className="mt-6"><div className="grid gap-6 xl:grid-cols-2"><LiveMap points={detailPoints} route={detailRoute}/><section>
+   {/* Only the detail slides. The list under it is the navigation driving the
+       swap, and sliding that out from under the pointer on every click is the
+       one thing it must not do. */}
+   <SlideSwap swapKey={active?.id??'none'}>{active&&accepted?<><p className="text-xs font-bold uppercase text-primary">{delivery?'Delivery handoff':'Available assignment'}</p><h2 className="mt-2 text-2xl font-semibold">{active.title}</h2><div className="mt-6 space-y-5 border-y py-5"><Stop title="Pickup" detail={active.pickup_address} time={delivery?.picked_up_at}/><Stop title="Delivery" detail={recipient?.name??'Recipient'} time={delivery?.delivered_at}/></div><p className="mt-4 text-sm text-muted-foreground">{Number(active.pounds)} lb · {active.storage_required}</p><p className="mt-3 text-sm">Driver: {delivery?.driver_name||'Not yet assigned'}</p><p className="mt-4 border-l-2 border-info pl-3 text-sm leading-6 text-muted-foreground">Follow your organization’s food-safety policy. Pickup confirmation acknowledges that you checked the handling requirements.</p>{!delivery?.driver_user_id&&!delivery?.picked_up_at&&(role==='driver'||coordinator)&&<Button className="mt-5" disabled={busy||deadline<clock} onClick={()=>act(accepted.id,'claim')}><Truck/> Claim route</Button>}{delivery&&canHandoff&&<div className="mt-5 flex flex-wrap gap-2"><Button disabled={busy||Boolean(delivery.picked_up_at)} onClick={()=>act(delivery.id,'pickup')}><Check/> Confirm safe pickup</Button><Button disabled={busy||!delivery.picked_up_at||Boolean(delivery.delivered_at)} onClick={()=>act(delivery.id,'deliver')}><PackageCheck/> Confirm delivery</Button></div>}{delivery?.driver_user_id&&!canHandoff&&<p className="mt-5 text-sm text-muted-foreground">The assigned driver records this handoff.</p>}</>:<Empty title="No accepted route selected" copy="Choose an accepted rescue from the relay board to view its delivery."/>}</SlideSwap>
+   <div className="mt-8 border-t pt-6"><h3 className="font-semibold">Accepted rescues</h3>
+    <p className="mt-1 text-sm text-muted-foreground">Pick one to bring its delivery in above.</p>
+    <ul className="mt-4 space-y-2">{data.matches.filter(m=>m.status==='accepted').map(m=>{
+     const d=data.donations.find(d=>d.id===m.donation_id);
+     if(!d)return null;
+     const to=data.organizations.find(o=>o.id===m.recipient_org_id)?.name;
+     const open=active?.id===d.id;
+     return <li key={m.id}>
+      <button
+       type="button"
+       onClick={()=>setSelected(d.id)}
+       aria-current={open?'true':undefined}
+       className={`group flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${open?'border-primary/40 bg-primary/5':'hover:bg-secondary'}`}
+      >
+       {/* Marks the open rescue, and grows into place rather than blinking on. */}
+       <span aria-hidden="true" className={`h-8 w-1 shrink-0 rounded-full bg-primary transition-transform duration-200 ${open?'scale-y-100':'scale-y-0'}`}/>
+       <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{d.title}</span>
+        <span className="block truncate text-xs text-muted-foreground">{Number(d.pounds)} lb{to?` · ${to}`:''}</span>
+       </span>
+       <ArrowRight className={`size-4 shrink-0 transition-transform ${open?'text-primary':'text-muted-foreground group-hover:translate-x-0.5'}`}/>
+      </button>
+     </li>;
+    })}</ul>
+   </div>
+  </section></div></TabsContent>
  <TabsContent value="partners" className="mt-6"><PartnerDirectory partners={partners} coordinator={coordinator} busy={busy} locationShared={Boolean(location.coords)} locating={location.status==='prompting'} onVerify={changeVerification} onRequestLocation={location.request} viewer={location.coords} summarize={summarizePartnerById}/></TabsContent>
  <TabsContent value="activity" className="mt-6 space-y-10">
  <section>
