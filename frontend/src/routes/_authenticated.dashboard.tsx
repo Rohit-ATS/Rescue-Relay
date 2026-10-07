@@ -10,9 +10,9 @@ import { LiveMap, type MapPoint } from '@/components/rescuerelay/live-map';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchWorkspaceData, performRescueAction, updatePartnerVerification } from '@/lib/rescue-client';
-import { buildActivityFeed } from '@/lib/rescue-activity';
+import { buildActivityFeed, type RescueActivity } from '@/lib/rescue-activity';
 import { DonationDialog } from '@/components/rescuerelay/donation-dialog';
 import { formatMoment } from '@/lib/format';
 import { SlideSwap } from '@/components/rescuerelay/slide-swap';
@@ -42,6 +42,7 @@ function Dashboard(){
  const search=Route.useSearch();
  const {data,error,isPending,isFetching,refetch}=useQuery({queryKey:WORKSPACE_QUERY_KEY,queryFn:()=>fetchWorkspaceData(),refetchInterval:connection==='Live'?POLL_LIVE_MS:POLL_DEGRADED_MS,refetchOnWindowFocus:true,refetchOnReconnect:true});
  const location=useViewerLocation();
+ const [feed,setFeed]=useState<RescueActivity['phase']>('current');
  const [routeRun,setRouteRun]=useState<Opportunity|null>(null);const [routeSummary,setRouteSummary]=useState<{distance:string;duration:string;followsRoads?:boolean}|null>(null); const [detailId,setDetailId]=useState(''); const [tab,setTab]=useState(search?.tab||'overview');const [selected,setSelected]=useState('');const [busy,setBusy]=useState(false);const [clock,setClock]=useState(Date.now());
  useEffect(()=>{if(search?.tab)setTab(search.tab);},[search?.tab]);
  useEffect(()=>{const onUpdated=()=>void refetch(); window.addEventListener('rescuerelay:workspace-updated', onUpdated); return ()=>window.removeEventListener('rescuerelay:workspace-updated', onUpdated);},[refetch]);
@@ -110,12 +111,19 @@ function Dashboard(){
  <TabsContent value="partners" className="mt-6"><PartnerDirectory partners={partners} coordinator={coordinator} busy={busy} locationShared={Boolean(location.coords)} locating={location.status==='prompting'} onVerify={changeVerification} onRequestLocation={location.request} viewer={location.coords} summarize={summarizePartnerById}/></TabsContent>
  <TabsContent value="activity" className="mt-6 space-y-10">
  <section>
-  <div className="flex flex-wrap items-end justify-between gap-2"><h2 className="text-2xl font-semibold">Current activities</h2>{activity.current.length>0&&<p className="text-sm text-muted-foreground">{waitingCount?`${waitingCount} waiting on you`:'Nothing blocked on you'}</p>}</div>
-  <div className="mt-5 space-y-3">{activity.current.length?activity.current.map(a=><ActivityCard key={a.key} activity={a} now={clock} onOpen={choose} onAct={act} busy={busy}/>):<Empty title="No current activities" copy="Claim a route, accept an offer, or post surplus and it will appear here while it is in progress."/>}</div>
- </section>
- <section>
-  <h2 className="text-2xl font-semibold">Recent activities</h2>
-  <div className="mt-5 space-y-3">{activity.recent.length?activity.recent.map(a=><ActivityCard key={a.key} activity={a} now={clock} onOpen={choose} onAct={act} busy={busy}/>):<Empty title="No completed activities yet" copy="Finished rescues move here with the time they were closed."/>}</div>
+  {/* Live work and finished work are one section the viewer switches between, so a
+      long history never pushes what is still in progress off the screen. */}
+  <Tabs value={feed} onValueChange={v=>setFeed(v as RescueActivity['phase'])}>
+   <div className="flex flex-wrap items-end justify-between gap-2">
+    <TabsList aria-label="Which activities to show">
+     <TabsTrigger value="current">Current activities<Count n={activity.current.length}/></TabsTrigger>
+     <TabsTrigger value="recent">Recent activities<Count n={activity.recent.length}/></TabsTrigger>
+    </TabsList>
+    {feed==='current'&&activity.current.length>0&&<p className="text-sm text-muted-foreground">{waitingCount?`${waitingCount} waiting on you`:'Nothing blocked on you'}</p>}
+   </div>
+   <TabsContent value="current" className="mt-5 space-y-3 duration-200 animate-in fade-in slide-in-from-right-4">{activity.current.length?activity.current.map(a=><ActivityCard key={a.key} activity={a} now={clock} onOpen={choose} onAct={act} busy={busy}/>):<Empty title="No current activities" copy="Claim a route, accept an offer, or post surplus and it will appear here while it is in progress."/>}</TabsContent>
+   <TabsContent value="recent" className="mt-5 space-y-3 duration-200 animate-in fade-in slide-in-from-right-4">{activity.recent.length?activity.recent.map(a=><ActivityCard key={a.key} activity={a} now={clock} onOpen={choose} onAct={act} busy={busy}/>):<Empty title="No completed activities yet" copy="Finished rescues move here with the time they were closed."/>}</TabsContent>
+  </Tabs>
  </section>
  <section>
   <h2 className="text-xl font-semibold">Network log</h2>
@@ -127,6 +135,11 @@ function Dashboard(){
  </Tabs>
  <RescueDetailDialog rescue={data.donations.find(d=>d.id===detailId)??null} matches={data.matches.filter(m=>m.donation_id===detailId)} organizations={data.organizations} delivery={(()=>{const accepted=data.matches.find(m=>m.donation_id===detailId&&m.status==='accepted');return accepted?data.deliveries.find(x=>x.match_id===accepted.id)??null:null;})()} statusTone={tone} now={clock} onClose={()=>setDetailId('')} onOpenWorkspace={choose}/>
  </div></AppShell>;
+}
+/** How many entries a list holds, shown on its switch so the hidden one still reports itself. */
+function Count({n}:{n:number}){
+ if(!n)return null;
+ return <span className="ml-2 rounded bg-foreground/10 px-1.5 text-xs tabular-nums">{n}</span>;
 }
 /** Reports what the connection is actually doing, including how long since the last saved change. */
 function LiveBadge(){
