@@ -1,6 +1,9 @@
 import type { Database } from "@/integrations/supabase/types";
 
-export type Organization = Database["public"]["Tables"]["organizations"]["Row"];
+export type Organization = Database["public"]["Tables"]["organizations"]["Row"] & {
+  /** Optional until the partner-photo migration has been applied remotely. */
+  photo_url?: string | null;
+};
 export type Donation = Database["public"]["Tables"]["donations"]["Row"];
 export type Match = Database["public"]["Tables"]["matches"]["Row"];
 export type Delivery = Database["public"]["Tables"]["deliveries"]["Row"];
@@ -37,7 +40,7 @@ export const DEMO_USER_ID = "d0000000-0000-4000-a000-000000000004"; // Coordinat
 export const INITIAL_ORGANIZATIONS: Organization[] = [
   {
     id: "d2000000-0000-4000-a000-000000000001",
-    name: "Riverbend Food Pantry",
+    name: "Food Bank of Iowa (Demo)",
     type: "recipient",
     verification_status: "verified",
     address: "2220 E 17th St, Des Moines, IA 50316",
@@ -47,6 +50,8 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     capacity_lbs: 420,
     accepted_categories: ["prepared meals", "produce", "dairy"],
     households_served: 310,
+    // Official Food Bank of Iowa facility image. The rescue activity is fictional demo data.
+    photo_url: "https://foodbankiowa.org/app/uploads/2022/03/hero-contact-1440.jpg",
     created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
   },
   {
@@ -137,7 +142,7 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
   // The names, capacities, and rescue activity below are fictional.
   {
     id: "d2000000-0000-4000-a000-000000000010",
-    name: "Grand Avenue Community Fridge (Demo)",
+    name: "St. Mark Neighborhood Fridge (Demo)",
     type: "recipient",
     verification_status: "verified",
     address: "1105 Grand Ave, West Des Moines, IA 50265",
@@ -151,7 +156,7 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
   },
   {
     id: "d2000000-0000-4000-a000-000000000011",
-    name: "Library Lane Community Fridge (Demo)",
+    name: "Urbandale Public Library Community Fridge (Demo)",
     type: "recipient",
     verification_status: "verified",
     address: "3520 86th St, Urbandale, IA 50322",
@@ -161,6 +166,8 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     capacity_lbs: 95,
     accepted_categories: ["produce", "bakery", "dairy"],
     households_served: 65,
+    // Public exterior of the library at this address; the community-fridge program is illustrative.
+    photo_url: "https://static.wixstatic.com/media/a38e21_a67d71cf8e2d499d8fe1ed7b129b0705~mv2.jpg/v1/fill/w_980%2Ch_636%2Cal_c%2Cq_85%2Cusm_0.66_1.00_0.01%2Cenc_auto/a38e21_a67d71cf8e2d499d8fe1ed7b129b0705~mv2.jpg",
     created_at: new Date(Date.now() - 86400000 * 9).toISOString(),
   },
   {
