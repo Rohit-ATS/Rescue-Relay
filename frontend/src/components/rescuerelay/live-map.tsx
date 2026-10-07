@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, MapPin, RefreshCw } from "lucide-react";
+import { ExternalLink, Key, MapPin, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { fetchDrivingRoute } from "@/lib/routing";
-import { formatMiles, formatMinutes } from "@/lib/geo";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 type MapInstance = { fitBounds: (bounds: unknown, padding?: number) => void };
 type DirectionsLeg = { distance?: { text: string }; duration?: { text: string } };
@@ -53,7 +62,7 @@ export type MapRoute = {
   destination: { lat: number; lng: number };
 };
 
-/** Brand tokens, resolved to hex because mapping APIs cannot read CSS custom properties. */
+/** Brand tokens, resolved to hex for Google Maps markers and overlays. */
 const MARKER_COLORS = {
   donor: { fill: "#f2612b", ring: "#ffffff" },
   recipient: { fill: "#004c25", ring: "#ffffff" },
@@ -61,7 +70,7 @@ const MARKER_COLORS = {
 
 const MARKER_SIZE = 40;
 
-/** A quiet basemap styling for Google Maps. */
+/** Basemap styling for Google Maps. */
 const BASEMAP_STYLE = [
   { featureType: "poi", stylers: [{ visibility: "off" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
@@ -82,7 +91,7 @@ const BASEMAP_STYLE = [
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#6b8b93" }] },
 ];
 
-/** A teardrop pin carrying a glyph, drawn as SVG string. */
+/** Teardrop pin carrying a glyph, drawn as SVG string for Google Maps. */
 function createMarkerSvg(kind: MapPoint["kind"]) {
   const { fill, ring } = MARKER_COLORS[kind];
   const glyph =
@@ -131,84 +140,63 @@ export function getGoogleMapsDirectionsUrl(points: MapPoint[], route?: MapRoute)
   if (points.length === 1 && points[0]) {
     return `https://www.google.com/maps/search/?api=1&query=${points[0].lat},${points[0].lng}`;
   }
+  if (points.length > 1) {
+    const p1 = points[0];
+    const p2 = points[points.length - 1];
+    if (p1 && p2) {
+      return `https://www.google.com/maps/dir/?api=1&origin=${p1.lat},${p1.lng}&destination=${p2.lat},${p2.lng}&travelmode=driving`;
+    }
+  }
   return `https://www.google.com/maps/search/?api=1&query=Des+Moines,+IA`;
 }
 
-function ensureLeafletCss() {
-  if (typeof document === "undefined") return;
-  if (document.getElementById("rescuerelay-leaflet-css")) return;
-  const link = document.createElement("link");
-  link.id = "rescuerelay-leaflet-css";
-  link.rel = "stylesheet";
-  link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-  document.head.appendChild(link);
-
-  const style = document.createElement("style");
-  style.id = "rescuerelay-leaflet-custom-style";
-  style.textContent = `
-    .leaflet-popup-content-wrapper {
-      background: #ffffff !important;
-      border-radius: 6px !important;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.12) !important;
-      border: 1px solid rgba(0,0,0,0.08) !important;
-      padding: 0 !important;
-    }
-    .leaflet-popup-content {
-      margin: 10px 12px !important;
-      line-height: 1.4 !important;
-    }
-    .leaflet-popup-tip {
-      background: #ffffff !important;
-    }
-    .rescuerelay-marker-wrapper {
-      filter: drop-shadow(0 2px 5px rgba(0,0,0,0.3));
-      transition: transform 0.15s ease;
-    }
-    .rescuerelay-marker-wrapper:hover {
-      transform: scale(1.1);
-    }
-  `;
-  document.head.appendChild(style);
+export function getGoogleMapsEmbedUrl(points: MapPoint[], route?: MapRoute): string {
+  if (route) {
+    return `https://maps.google.com/maps?saddr=${route.origin.lat},${route.origin.lng}&daddr=${route.destination.lat},${route.destination.lng}&hl=en&output=embed`;
+  }
+  if (points.length === 1 && points[0]) {
+    return `https://maps.google.com/maps?q=${points[0].lat},${points[0].lng}&hl=en&z=15&output=embed`;
+  }
+  if (points.length > 1) {
+    const lat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;
+    const lng = points.reduce((sum, p) => sum + p.lng, 0) / points.length;
+    return `https://maps.google.com/maps?q=${lat},${lng}&hl=en&z=12&output=embed`;
+  }
+  return `https://maps.google.com/maps?q=41.5908,-93.6208&hl=en&z=12&output=embed`;
 }
 
 let mapLoader: Promise<void> | undefined;
 let googleMapsAuthFailed = false;
-/** Why the OpenStreetMap renderer is in use, so the badge can say rather than hide it. */
-type GoogleSkipReason = "no-key" | "rejected-domain" | "unreachable";
-let googleSkipReason: GoogleSkipReason | null = null;
 
 export function resetGoogleMapsStateForTesting() {
   mapLoader = undefined;
   googleMapsAuthFailed = false;
-  googleSkipReason = null;
-  googleWarningLogged = false;
 }
 
-function loadGoogleMaps(key: string, channel: string) {
-  if (window.google?.maps.Map) return Promise.resolve();
+function loadGoogleMaps(key: string, channel?: string) {
+  if (window.google?.maps?.Map) return Promise.resolve();
   if (mapLoader) return mapLoader;
   mapLoader = new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error("Map loading timed out.")), 15000);
+    const timeout = window.setTimeout(() => reject(new Error("Map loading timed out.")), 12000);
     window.initRescueRelayMap = () => {
       window.clearTimeout(timeout);
       resolve();
     };
     window.gm_authFailure = () => {
       googleMapsAuthFailed = true;
-      // Google authorised the key but not this origin: the referrer allow-list.
-      googleSkipReason = "rejected-domain";
       window.dispatchEvent(new Event("rescue-map-auth-error"));
     };
     const script = document.createElement("script");
     script.id = "rescuerelay-google-maps";
     script.async = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&loading=async&callback=initRescueRelayMap&channel=${encodeURIComponent(channel)}`;
+    const channelParam =
+      channel && channel !== "rescuerelay" ? `&channel=${encodeURIComponent(channel)}` : "";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&libraries=places,geometry&loading=async&callback=initRescueRelayMap${channelParam}`;
     script.onerror = () => {
       window.clearTimeout(timeout);
       mapLoader = undefined;
       script.remove();
       googleMapsAuthFailed = true;
-      googleSkipReason = googleSkipReason ?? "unreachable";
       window.dispatchEvent(new Event("rescue-map-auth-error"));
       reject(new Error("Google Maps script failed to load."));
     };
@@ -216,28 +204,6 @@ function loadGoogleMaps(key: string, channel: string) {
   });
   return mapLoader;
 }
-
-/** Logged once, so the cause stays diagnosable without an error sitting over a working map. */
-let googleWarningLogged = false;
-function warnGoogleUnavailable() {
-  if (googleWarningLogged) return;
-  googleWarningLogged = true;
-  const origin = typeof window === "undefined" ? "this origin" : window.location.origin;
-  console.warn(
-    `[RescueRelay] Google Maps declined to render for ${origin}, so OpenStreetMap is rendering instead. ` +
-      "The map is fully functional either way. To use Google, check in Google Cloud Console that " +
-      `${origin} is listed under the key's Application restrictions -> Websites, that the Maps ` +
-      "JavaScript API is enabled, and that billing is active. Google logs the exact error code to " +
-      "this console just above: https://developers.google.com/maps/documentation/javascript/error-messages",
-  );
-}
-
-const SKIP_EXPLANATIONS: Record<GoogleSkipReason, string> = {
-  "no-key": "No Google Maps key configured, so the keyless OpenStreetMap renderer is used.",
-  "rejected-domain":
-    "Google Maps is unavailable for this domain, so OpenStreetMap is rendering instead. Both show the same rescues and road routes. The browser console explains how to enable Google.",
-  unreachable: "Google Maps could not be reached, so the keyless OpenStreetMap renderer is used.",
-};
 
 export function LiveMap({
   compact = false,
@@ -256,8 +222,8 @@ export function LiveMap({
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
-  const [mapEngine, setMapEngine] = useState<"google" | "osm">("google");
-  const [skipReason, setSkipReason] = useState<GoogleSkipReason | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [configOpen, setConfigOpen] = useState(false);
 
   const pointsKey = JSON.stringify(points.map((p) => [p.id, p.lat, p.lng, p.label, p.kind]));
   const routeKey = JSON.stringify(route ?? null);
@@ -279,12 +245,10 @@ export function LiveMap({
     import.meta.env["VITE_GOOGLE_MAPS_API_KEY"] ||
     import.meta.env["VITE_GOOGLE_MAPS_BROWSER_KEY"] ||
     import.meta.env["VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY"];
-  const channel =
-    import.meta.env["VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID"] || "rescuerelay";
+  const channel = import.meta.env["VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID"];
 
   useEffect(() => {
     let active = true;
-    let cleanup: (() => void) | undefined;
     const markers: Array<{ setMap: (map: unknown) => void }> = [];
     const renderers: Array<{ setMap: (map: unknown) => void }> = [];
     const infoWindows: Array<{ close: () => void }> = [];
@@ -292,126 +256,39 @@ export function LiveMap({
     setError("");
     setReady(false);
 
-    async function initLeafletMap() {
+    function initGoogleEmbed() {
       if (!active || !ref.current) return;
-      ensureLeafletCss();
-      const L = (await import("leaflet")).default;
-      if (!active || !ref.current) return;
-
       ref.current.innerHTML = "";
-      const container = document.createElement("div");
-      container.style.width = "100%";
-      container.style.height = "100%";
-      ref.current.appendChild(container);
-
       const valid = pointsRef.current.filter(
         (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng),
       );
-      const center = valid[0] ?? { lat: 41.5908, lng: -93.6208 };
+      const embedUrl = getGoogleMapsEmbedUrl(valid, routeRef.current);
 
-      const leafletMap = L.map(container, {
-        center: [center.lat, center.lng],
-        zoom: 12,
-        zoomControl: true,
-        // OpenStreetMap asks for visible credit, so the control stays on.
-        attributionControl: true,
-      });
+      const iframe = document.createElement("iframe");
+      iframe.title = "Google Maps Live Dispatch";
+      iframe.src = embedUrl;
+      iframe.className = "absolute inset-0 size-full border-0";
+      iframe.loading = "lazy";
+      iframe.referrerPolicy = "no-referrer-when-downgrade";
+      iframe.allowFullscreen = true;
 
-      // CARTO's basemaps now require an API key and watermark every tile without one.
-      // OpenStreetMap's standard tiles are keyless, which keeps the map working on any
-      // deployment with no credentials — the same principle as the geocoding chain.
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(leafletMap);
-
-      const markerLayer = L.featureGroup().addTo(leafletMap);
-
-      valid.forEach((p) => {
-        const svg = createMarkerSvg(p.kind);
-        const icon = L.divIcon({
-          className: "",
-          html: `<div class="rescuerelay-marker-wrapper" style="width:28px;height:40px;cursor:pointer;">${svg}</div>`,
-          iconSize: [28, 40],
-          iconAnchor: [14, 40],
-          popupAnchor: [0, -38],
-        });
-
-        const marker = L.marker([p.lat, p.lng], {
-          icon,
-          zIndexOffset: p.kind === "donor" ? 100 : 50,
-        });
-        const externalLink = getGoogleMapsDirectionsUrl([p]);
-        const popupContent =
-          `<div style="font:500 13px/1.45 system-ui,sans-serif;color:#0a1b11;max-width:220px">` +
-          `<div style="font-weight:700;margin-bottom:2px">${escapeHtml(p.label)}</div>` +
-          `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;letter-spacing:.04em;text-transform:uppercase">${p.kind === "donor" ? "Pickup" : "Food bank"}</div>` +
-          `<a href="${externalLink}" target="_blank" rel="noreferrer" style="display:inline-block;color:#004c25;font-size:11px;font-weight:600;margin-top:4px;text-decoration:underline">Open in Google Maps →</a>` +
-          `</div>`;
-
-        marker.bindPopup(popupContent, { closeButton: false, offset: [0, -8] });
-        markerLayer.addLayer(marker);
-      });
-
-      if (valid.length > 1) {
-        leafletMap.fitBounds(markerLayer.getBounds(), { padding: [45, 45], maxZoom: 15 });
-      }
-
-      const routeData = routeRef.current;
-      if (routeData) {
-        // Drawn immediately as a straight dashed line so the pair is connected while the
-        // road geometry is fetched, then replaced once the real route arrives.
-        const provisional = L.polyline(
-          [
-            [routeData.origin.lat, routeData.origin.lng],
-            [routeData.destination.lat, routeData.destination.lng],
-          ],
-          { color: "#004c25", weight: 4, opacity: 0.35, dashArray: "8, 8" },
-        ).addTo(leafletMap);
-
-        void fetchDrivingRoute(
-          { latitude: routeData.origin.lat, longitude: routeData.origin.lng },
-          { latitude: routeData.destination.lat, longitude: routeData.destination.lng },
-        ).then((driving) => {
-          if (!active) return;
-          provisional.remove();
-
-          // A casing under the route keeps it legible over busy streets.
-          L.polyline(driving.path, { color: "#ffffff", weight: 9, opacity: 0.9 }).addTo(leafletMap);
-          L.polyline(driving.path, {
-            color: "#004c25",
-            weight: 5,
-            opacity: 0.95,
-            lineJoin: "round",
-            lineCap: "round",
-            // Only a fallback stays dashed, so a straight line never reads as a real route.
-            ...(driving.followsRoads ? {} : { dashArray: "8, 8", opacity: 0.6 }),
-          }).addTo(leafletMap);
-
-          leafletMap.fitBounds(L.latLngBounds(driving.path), { padding: [45, 45], maxZoom: 15 });
-
-          onRouteSummaryRef.current?.({
-            distance: formatMiles(driving.distanceMiles),
-            duration: formatMinutes(driving.durationMinutes),
-            followsRoads: driving.followsRoads,
-          });
-        });
-      }
-
-      setMapEngine("osm");
-      setSkipReason(googleSkipReason);
+      ref.current.appendChild(iframe);
       setReady(true);
-
-      cleanup = () => {
-        leafletMap.remove();
-      };
     }
 
     async function initGoogleMap() {
       try {
+        if (!key) {
+          initGoogleEmbed();
+          return;
+        }
+
         await loadGoogleMaps(key, channel);
         const maps = window.google?.maps;
-        if (!active || !maps || !ref.current) return;
+        if (!active || !maps || !ref.current) {
+          initGoogleEmbed();
+          return;
+        }
 
         ref.current.innerHTML = "";
         const valid = pointsRef.current.filter(
@@ -422,8 +299,12 @@ export function LiveMap({
           center: valid[0] ?? { lat: 41.5908, lng: -93.6208 },
           zoom: 12,
           clickableIcons: false,
-          disableDefaultUI: true,
+          disableDefaultUI: false,
           zoomControl: true,
+          mapTypeControl: true,
+          scaleControl: true,
+          streetViewControl: false,
+          fullscreenControl: true,
           styles: BASEMAP_STYLE,
         });
 
@@ -443,10 +324,10 @@ export function LiveMap({
           marker.addListener("click", () => {
             const externalLink = getGoogleMapsDirectionsUrl([p]);
             info.setContent(
-              `<div style="font:500 13px/1.45 system-ui,sans-serif;color:#0a1b11;max-width:220px">` +
-                `<div style="font-weight:700;margin-bottom:2px">${escapeHtml(p.label)}</div>` +
-                `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;letter-spacing:.04em;text-transform:uppercase">${p.kind === "donor" ? "Pickup" : "Food bank"}</div>` +
-                `<a href="${externalLink}" target="_blank" rel="noreferrer" style="display:inline-block;color:#004c25;font-size:11px;font-weight:600;margin-top:4px;text-decoration:underline">Open in Google Maps →</a>` +
+              `<div style="font:500 13px/1.45 system-ui,sans-serif;color:#0a1b11;max-width:240px;padding:4px">` +
+                `<div style="font-weight:700;font-size:14px;margin-bottom:2px">${escapeHtml(p.label)}</div>` +
+                `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">${p.kind === "donor" ? "Pickup Location" : "Food Bank Partner"}</div>` +
+                `<a href="${externalLink}" target="_blank" rel="noreferrer" style="display:inline-block;color:#004c25;font-size:12px;font-weight:600;text-decoration:underline">Open in Google Maps →</a>` +
                 `</div>`,
             );
             info.open({ map, anchor: marker });
@@ -455,7 +336,6 @@ export function LiveMap({
         });
 
         if (valid.length > 1) map.fitBounds(bounds, 45);
-        setMapEngine("google");
         setReady(true);
 
         const routeData = routeRef.current;
@@ -464,7 +344,7 @@ export function LiveMap({
             map,
             suppressMarkers: true,
             preserveViewport: false,
-            polylineOptions: { strokeColor: "#004c25", strokeWeight: 5, strokeOpacity: 0.85 },
+            polylineOptions: { strokeColor: "#004c25", strokeWeight: 5, strokeOpacity: 0.9 },
           });
           renderers.push(renderer);
           void new maps.DirectionsService()
@@ -479,7 +359,7 @@ export function LiveMap({
               const leg = result.routes?.[0]?.legs?.[0];
               onRouteSummaryRef.current?.(
                 leg?.distance && leg.duration
-                  ? { distance: leg.distance.text, duration: leg.duration.text }
+                  ? { distance: leg.distance.text, duration: leg.duration.text, followsRoads: true }
                   : null,
               );
             })
@@ -489,7 +369,7 @@ export function LiveMap({
         }
       } catch {
         if (active) {
-          await initLeafletMap();
+          initGoogleEmbed();
         }
       }
     }
@@ -497,18 +377,14 @@ export function LiveMap({
     const authErrorHandler = () => {
       if (active) {
         googleMapsAuthFailed = true;
-        warnGoogleUnavailable();
-        void initLeafletMap();
+        initGoogleEmbed();
       }
     };
 
     window.addEventListener("rescue-map-auth-error", authErrorHandler);
 
-    // Leaflet needs no credentials, so it renders whenever Google cannot: no key
-    // configured, or a key whose referrer restrictions reject this origin.
-    if (!key || googleMapsAuthFailed) {
-      if (!key) googleSkipReason = "no-key";
-      void initLeafletMap();
+    if (googleMapsAuthFailed) {
+      initGoogleEmbed();
     } else {
       void initGoogleMap();
     }
@@ -519,9 +395,24 @@ export function LiveMap({
       markers.forEach((marker) => marker.setMap(null));
       renderers.forEach((renderer) => renderer.setMap(null));
       infoWindows.forEach((w) => w.close());
-      cleanup?.();
     };
   }, [key, channel, pointsKey, retry, routeKey, customKey]);
+
+  function handleSaveKey(e: React.FormEvent) {
+    e.preventDefault();
+    if (apiKeyInput.trim()) {
+      localStorage.setItem("rr_google_maps_key", apiKeyInput.trim());
+      toast.success("Google Maps API key saved! Reloading map...");
+    } else {
+      localStorage.removeItem("rr_google_maps_key");
+      toast.info("Cleared custom API key. Using default config.");
+    }
+    setConfigOpen(false);
+    mapLoader = undefined;
+    googleMapsAuthFailed = false;
+    document.getElementById("rescuerelay-google-maps")?.remove();
+    setRetry((v) => v + 1);
+  }
 
   const externalMapUrl = getGoogleMapsDirectionsUrl(points, route);
 
@@ -535,21 +426,55 @@ export function LiveMap({
         <div className="absolute inset-0 grid place-items-center bg-map-pattern">
           <div className="max-w-xs rounded-md border bg-background/95 p-4 text-center text-sm shadow-sm">
             <MapPin className="mx-auto mb-2 size-5 text-primary" />
-            <p role="status">{error || "Loading rescue locations…"}</p>
+            <p role="status">{error || "Loading Google Maps locations…"}</p>
             {error && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={() => {
-                  mapLoader = undefined;
-                  googleMapsAuthFailed = false;
-                  document.getElementById("rescuerelay-google-maps")?.remove();
-                  setRetry((v) => v + 1);
-                }}
-              >
-                <RefreshCw /> Retry map
-              </Button>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    mapLoader = undefined;
+                    googleMapsAuthFailed = false;
+                    document.getElementById("rescuerelay-google-maps")?.remove();
+                    setRetry((v) => v + 1);
+                  }}
+                >
+                  <RefreshCw className="mr-1.5 size-3.5" /> Retry
+                </Button>
+                <Dialog open={configOpen} onOpenChange={setConfigOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Key className="mr-1.5 size-3.5" /> Set API Key
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Configure Google Maps API Key</DialogTitle>
+                      <DialogDescription>
+                        Paste an authorized Google Maps Platform JavaScript API Key.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleSaveKey} className="space-y-4 pt-2">
+                      <div>
+                        <Label htmlFor="map-api-key">Google Maps API Key</Label>
+                        <Input
+                          id="map-api-key"
+                          value={apiKeyInput}
+                          onChange={(e) => setApiKeyInput(e.target.value)}
+                          placeholder="AIzaSy..."
+                          className="mt-1.5 font-mono text-xs"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="ghost" onClick={() => setConfigOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="submit">Save Key</Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
             )}
           </div>
         </div>
@@ -606,25 +531,16 @@ export function LiveMap({
 
       {ready && (
         <div className="absolute top-3 right-3 z-[1000] flex items-center gap-1.5">
-          <div
-            className="rounded border bg-background/90 px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm"
-            title={
-              mapEngine === "osm"
-                ? SKIP_EXPLANATIONS[skipReason ?? "no-key"]
-                : "Rendered by Google Maps"
-            }
-          >
-            {mapEngine === "google" ? "Google Maps" : "OpenStreetMap"}
-          </div>
           <a
             href={externalMapUrl}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1 rounded border bg-background/90 px-2 py-0.5 text-[10px] font-medium text-foreground shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-primary"
+            className="flex items-center gap-1 rounded border bg-background/90 px-2 py-1 text-[11px] font-medium text-foreground shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-primary"
             title="Open in Google Maps"
           >
-            <span>Open in Google Maps</span>
-            <ExternalLink className="size-2.5 opacity-70" />
+            <MapPin className="size-3 text-primary" />
+            <span>Google Maps</span>
+            <ExternalLink className="size-2.5 opacity-60" />
           </a>
         </div>
       )}

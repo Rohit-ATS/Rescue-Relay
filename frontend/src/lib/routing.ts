@@ -8,7 +8,7 @@
  */
 import { estimatedDriveMinutes, estimatedRoadMiles, type Coords } from "@/lib/geo";
 
-/** [lat, lng] pairs, the order Leaflet expects. */
+/** [lat, lng] coordinate pairs. */
 export type RoutePath = Array<[number, number]>;
 
 export type DrivingRoute = {
