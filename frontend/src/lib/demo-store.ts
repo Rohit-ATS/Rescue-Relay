@@ -133,6 +133,36 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     households_served: 210,
     created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
   },
+  // These are illustrative demo partners placed at real, public metro locations.
+  // The names, capacities, and rescue activity below are fictional.
+  {
+    id: "d2000000-0000-4000-a000-000000000010",
+    name: "Grand Avenue Community Fridge (Demo)",
+    type: "recipient",
+    verification_status: "verified",
+    address: "1105 Grand Ave, West Des Moines, IA 50265",
+    latitude: 41.5825411,
+    longitude: -93.7173332,
+    cold_storage: true,
+    capacity_lbs: 110,
+    accepted_categories: ["prepared meals", "produce", "bakery"],
+    households_served: 80,
+    created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
+  },
+  {
+    id: "d2000000-0000-4000-a000-000000000011",
+    name: "Library Lane Community Fridge (Demo)",
+    type: "recipient",
+    verification_status: "verified",
+    address: "3520 86th St, Urbandale, IA 50322",
+    latitude: 41.6266199,
+    longitude: -93.7387111,
+    cold_storage: true,
+    capacity_lbs: 95,
+    accepted_categories: ["produce", "bakery", "dairy"],
+    households_served: 65,
+    created_at: new Date(Date.now() - 86400000 * 9).toISOString(),
+  },
   {
     id: "d2000000-0000-4000-a000-000000000008",
     name: "Court Avenue Kitchen Co.",
@@ -347,6 +377,25 @@ export function getInitialDonations(now = Date.now()): Donation[] {
       photo_url: null,
       created_at: new Date(now - 52 * 3600000).toISOString(),
     },
+    {
+      id: "d1000000-0000-4000-a000-000000000008",
+      donor_user_id: DEMO_USER_ID,
+      donor_org_id: "d2000000-0000-4000-a000-000000000009",
+      title: "Community breakfast boxes (demo)",
+      category: "bakery",
+      pounds: 72,
+      servings: 60,
+      pickup_address: "700 Grand Ave, Des Moines, IA 50309",
+      pickup_deadline: new Date(now + 7 * 3600000).toISOString(),
+      storage_required: "ambient",
+      allergens: "Contains wheat, eggs, milk",
+      notes: "Illustrative demo rescue. Individually packed breakfast boxes for same-day pickup.",
+      latitude: 41.587423,
+      longitude: -93.626576,
+      status: "open",
+      photo_url: null,
+      created_at: new Date(now - 12 * 60000).toISOString(),
+    },
   ];
 }
 
@@ -451,6 +500,17 @@ export function getInitialMatches(now = Date.now()): Match[] {
       responded_at: new Date(now - 50 * 3600000).toISOString(),
       created_at: new Date(now - 52 * 3600000).toISOString(),
     },
+    {
+      id: "d3000000-0000-4000-a000-00000000000b",
+      donation_id: "d1000000-0000-4000-a000-000000000008",
+      recipient_org_id: "d2000000-0000-4000-a000-000000000010",
+      score: 82,
+      explanation: "8.3 miles away · same-day capacity available · accepts bakery items",
+      status: "proposed",
+      responded_by: null,
+      responded_at: null,
+      created_at: new Date(now - 10 * 60000).toISOString(),
+    },
   ];
 }
 
@@ -552,6 +612,14 @@ export function getInitialEvents(now = Date.now()): RescueEvent[] {
       event_type: "picked_up",
       detail: "Pickup confirmed with food safety temperature acknowledgement",
       created_at: new Date(now - 35 * 60000).toISOString(),
+    },
+    {
+      id: "e6",
+      donation_id: "d1000000-0000-4000-a000-000000000008",
+      actor_user_id: DEMO_USER_ID,
+      event_type: "donation_posted",
+      detail: "72 lb community breakfast boxes posted · illustrative demo rescue",
+      created_at: new Date(now - 12 * 60000).toISOString(),
     },
   ];
 }
