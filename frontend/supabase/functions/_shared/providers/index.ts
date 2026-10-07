@@ -4,6 +4,7 @@ import { adminClient } from "../auth.ts";
 import { decryptSecret, encryptSecret } from "../crypto.ts";
 import { HttpError } from "../http.ts";
 import { type SocialPlatform } from "../social/platforms.ts";
+import { facebookOAuth } from "./facebook.ts";
 import { googleBusinessOAuth } from "./google-business.ts";
 import { instagramOAuth } from "./instagram.ts";
 import { linkedinOAuth } from "./linkedin.ts";
@@ -15,6 +16,7 @@ export const PROVIDERS: Record<SocialPlatform, OAuthProvider> = {
   instagram: instagramOAuth,
   x: xOAuth,
   google_business: googleBusinessOAuth,
+  facebook: facebookOAuth,
 };
 
 export function getProvider(platform: SocialPlatform): OAuthProvider {

@@ -13,11 +13,19 @@ import {
 } from '../../supabase/functions/_shared/social/agents';
 
 describe('Social Platforms & MCP Constraints', () => {
-  it('enforces character limits for LinkedIn, Instagram, X, and Google Maps', () => {
+  it('enforces character limits for LinkedIn, Instagram, X, Google Maps, and Facebook', () => {
     expect(PLATFORM_SPECS.linkedin.maxChars).toBe(3000);
     expect(PLATFORM_SPECS.instagram.maxChars).toBe(2200);
     expect(PLATFORM_SPECS.x.maxChars).toBe(280);
     expect(PLATFORM_SPECS.google_business.maxChars).toBe(1500);
+    expect(PLATFORM_SPECS.facebook.maxChars).toBe(63206);
+  });
+
+  it('validates Facebook posts without requiring images', () => {
+    const post = 'Community food distribution today at Hope Pantry!';
+    const res = validateForPlatform('facebook', post);
+    expect(res.ok).toBe(true);
+    expect(res.errors).toHaveLength(0);
   });
 
   it('validates X character limits accurately', () => {

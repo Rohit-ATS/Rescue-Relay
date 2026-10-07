@@ -1,13 +1,14 @@
 // Platform rules shared by the edge functions (Deno) and the dashboard (Vite).
 // Pure TypeScript only — no Deno or DOM APIs — so both runtimes can import it.
 
-export type SocialPlatform = "linkedin" | "instagram" | "x" | "google_business";
+export type SocialPlatform = "linkedin" | "instagram" | "x" | "google_business" | "facebook";
 
 export const SOCIAL_PLATFORMS: readonly SocialPlatform[] = [
   "linkedin",
   "instagram",
   "x",
   "google_business",
+  "facebook",
 ] as const;
 
 export interface PlatformSpec {
@@ -61,6 +62,15 @@ export const PLATFORM_SPECS: Record<SocialPlatform, PlatformSpec> = {
     maxHashtags: 0,
     mcpServer: "mcp-google-business",
     accountNoun: "Business location",
+  },
+  facebook: {
+    id: "facebook",
+    label: "Facebook Page",
+    maxChars: 63206,
+    requiresImage: false,
+    maxHashtags: 5,
+    mcpServer: "mcp-facebook",
+    accountNoun: "Facebook Page",
   },
 };
 
