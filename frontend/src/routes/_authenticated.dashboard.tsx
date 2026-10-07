@@ -53,7 +53,14 @@ function Dashboard(){
  // Public food banks from OpenStreetMap. Fetched once per centre, and never
  // allowed to fail loudly: an empty list just means the map shows partners only.
  const [publicBanks,setPublicBanks]=useState<PublicFoodBank[]>([]);
- const banksCentre=location.coords??PILOT_CENTRE;
+ // Centred on the rescues, NOT on the viewer. A dispatcher in California
+ // looking at Des Moines donations was being shown Californian food banks, so
+ // the map spanned two thousand miles and framed empty country between them.
+ const banksCentre=useMemo(()=>{
+  const placed=(data?.donations??[]).filter(d=>Number.isFinite(d.latitude)&&Number.isFinite(d.longitude));
+  if(!placed.length)return location.coords??PILOT_CENTRE;
+  return {latitude:placed.reduce((n,d)=>n+d.latitude,0)/placed.length,longitude:placed.reduce((n,d)=>n+d.longitude,0)/placed.length};
+ },[data?.donations,location.coords]);
  useEffect(()=>{
   const controller=new AbortController();
   void fetchPublicFoodBanks(banksCentre.latitude,banksCentre.longitude,{signal:controller.signal}).then(setPublicBanks);

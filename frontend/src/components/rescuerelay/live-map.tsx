@@ -223,6 +223,9 @@ export function LiveMap({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  // True while the keyless iframe is standing in. It can show only one pin, so
+  // the legend must say so rather than letting a count imply pins that are not there.
+  const [embedded, setEmbedded] = useState(false);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [apiKeyInput, setApiKeyInput] = useState("");
@@ -261,6 +264,7 @@ export function LiveMap({
 
     function initGoogleEmbed() {
       if (!active || !ref.current) return;
+      setEmbedded(true);
       ref.current.innerHTML = "";
       const valid = pointsRef.current.filter(
         (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng),
@@ -298,6 +302,7 @@ export function LiveMap({
           (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng),
         );
 
+        setEmbedded(false);
         const map = new maps.Map(ref.current, {
           center: valid[0] ?? { lat: 41.5908, lng: -93.6208 },
           zoom: 12,
@@ -501,6 +506,14 @@ export function LiveMap({
                 {pickupCount} pickup{pickupCount === 1 ? "" : "s"} · {dropoffCount} food bank
                 {dropoffCount === 1 ? "" : "s"}
               </p>
+              {/* Without a Maps key the embed can plot a single point only, so a
+                  count here would otherwise promise pins the map cannot draw. */}
+              {embedded && points.length > 1 && (
+                <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                  Showing one combined marker. Add a Google Maps key to plot all {points.length}{" "}
+                  locations.
+                </p>
+              )}
               <ul className="mt-1.5 space-y-1">
                 {pickupCount > 0 && (
                   <li className="flex items-center gap-1.5">
