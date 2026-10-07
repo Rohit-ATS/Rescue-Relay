@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MapPin, RefreshCw } from "lucide-react";
+import { ExternalLink, MapPin, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchDrivingRoute } from "@/lib/routing";
 import { formatMiles, formatMinutes } from "@/lib/geo";
@@ -124,6 +124,16 @@ function escapeHtml(value: string) {
   );
 }
 
+export function getGoogleMapsDirectionsUrl(points: MapPoint[], route?: MapRoute): string {
+  if (route) {
+    return `https://www.google.com/maps/dir/?api=1&origin=${route.origin.lat},${route.origin.lng}&destination=${route.destination.lat},${route.destination.lng}&travelmode=driving`;
+  }
+  if (points.length === 1 && points[0]) {
+    return `https://www.google.com/maps/search/?api=1&query=${points[0].lat},${points[0].lng}`;
+  }
+  return `https://www.google.com/maps/search/?api=1&query=Des+Moines,+IA`;
+}
+
 function ensureLeafletCss() {
   if (typeof document === "undefined") return;
   if (document.getElementById("rescuerelay-leaflet-css")) return;
@@ -166,6 +176,13 @@ let googleMapsAuthFailed = false;
 /** Why the OpenStreetMap renderer is in use, so the badge can say rather than hide it. */
 type GoogleSkipReason = "no-key" | "rejected-domain" | "unreachable";
 let googleSkipReason: GoogleSkipReason | null = null;
+
+export function resetGoogleMapsStateForTesting() {
+  mapLoader = undefined;
+  googleMapsAuthFailed = false;
+  googleSkipReason = null;
+  googleWarningLogged = false;
+}
 
 function loadGoogleMaps(key: string, channel: string) {
   if (window.google?.maps.Map) return Promise.resolve();
@@ -255,7 +272,10 @@ export function LiveMap({
   const pickupCount = points.filter((p) => p.kind === "donor").length;
   const dropoffCount = points.length - pickupCount;
 
+  const customKey =
+    typeof window !== "undefined" ? localStorage.getItem("rr_google_maps_key") : null;
   const key =
+    customKey ||
     import.meta.env["VITE_GOOGLE_MAPS_API_KEY"] ||
     import.meta.env["VITE_GOOGLE_MAPS_BROWSER_KEY"] ||
     import.meta.env["VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY"];
@@ -321,11 +341,12 @@ export function LiveMap({
           icon,
           zIndexOffset: p.kind === "donor" ? 100 : 50,
         });
+        const externalLink = getGoogleMapsDirectionsUrl([p]);
         const popupContent =
           `<div style="font:500 13px/1.45 system-ui,sans-serif;color:#0a1b11;max-width:220px">` +
           `<div style="font-weight:700;margin-bottom:2px">${escapeHtml(p.label)}</div>` +
-          `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;letter-spacing:.04em;text-transform:uppercase">` +
-          `${p.kind === "donor" ? "Pickup" : "Food bank"}</div>` +
+          `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;letter-spacing:.04em;text-transform:uppercase">${p.kind === "donor" ? "Pickup" : "Food bank"}</div>` +
+          `<a href="${externalLink}" target="_blank" rel="noreferrer" style="display:inline-block;color:#004c25;font-size:11px;font-weight:600;margin-top:4px;text-decoration:underline">Open in Google Maps →</a>` +
           `</div>`;
 
         marker.bindPopup(popupContent, { closeButton: false, offset: [0, -8] });
@@ -420,11 +441,12 @@ export function LiveMap({
             zIndex: p.kind === "donor" ? 2 : 1,
           });
           marker.addListener("click", () => {
+            const externalLink = getGoogleMapsDirectionsUrl([p]);
             info.setContent(
               `<div style="font:500 13px/1.45 system-ui,sans-serif;color:#0a1b11;max-width:220px">` +
                 `<div style="font-weight:700;margin-bottom:2px">${escapeHtml(p.label)}</div>` +
-                `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;letter-spacing:.04em;text-transform:uppercase">` +
-                `${p.kind === "donor" ? "Pickup" : "Food bank"}</div>` +
+                `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;letter-spacing:.04em;text-transform:uppercase">${p.kind === "donor" ? "Pickup" : "Food bank"}</div>` +
+                `<a href="${externalLink}" target="_blank" rel="noreferrer" style="display:inline-block;color:#004c25;font-size:11px;font-weight:600;margin-top:4px;text-decoration:underline">Open in Google Maps →</a>` +
                 `</div>`,
             );
             info.open({ map, anchor: marker });
@@ -499,7 +521,9 @@ export function LiveMap({
       infoWindows.forEach((w) => w.close());
       cleanup?.();
     };
-  }, [key, channel, pointsKey, retry, routeKey]);
+  }, [key, channel, pointsKey, retry, routeKey, customKey]);
+
+  const externalMapUrl = getGoogleMapsDirectionsUrl(points, route);
 
   return (
     <div
@@ -581,15 +605,27 @@ export function LiveMap({
       )}
 
       {ready && (
-        <div
-          className="absolute top-3 right-3 z-[1000] max-w-[14rem] rounded border bg-background/90 px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm"
-          title={
-            mapEngine === "osm"
-              ? SKIP_EXPLANATIONS[skipReason ?? "no-key"]
-              : "Rendered by Google Maps"
-          }
-        >
-          {mapEngine === "google" ? "Google Maps" : "OpenStreetMap"}
+        <div className="absolute top-3 right-3 z-[1000] flex items-center gap-1.5">
+          <div
+            className="rounded border bg-background/90 px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm"
+            title={
+              mapEngine === "osm"
+                ? SKIP_EXPLANATIONS[skipReason ?? "no-key"]
+                : "Rendered by Google Maps"
+            }
+          >
+            {mapEngine === "google" ? "Google Maps" : "OpenStreetMap"}
+          </div>
+          <a
+            href={externalMapUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 rounded border bg-background/90 px-2 py-0.5 text-[10px] font-medium text-foreground shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-primary"
+            title="Open in Google Maps"
+          >
+            <span>Open in Google Maps</span>
+            <ExternalLink className="size-2.5 opacity-70" />
+          </a>
         </div>
       )}
     </div>

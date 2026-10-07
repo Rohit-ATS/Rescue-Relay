@@ -1,7 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LiveMap, type MapPoint } from "@/components/rescuerelay/live-map";
+import {
+  LiveMap,
+  resetGoogleMapsStateForTesting,
+  type MapPoint,
+} from "@/components/rescuerelay/live-map";
 
 /** Counts constructions so a rebuild loop is visible rather than merely slow. */
 let mapConstructions = 0;
@@ -65,11 +69,13 @@ const BANK: MapPoint = {
 };
 
 beforeEach(() => {
+  resetGoogleMapsStateForTesting();
   vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "test-key");
   installFakeMapsApi();
 });
 
 afterEach(() => {
+  resetGoogleMapsStateForTesting();
   vi.unstubAllEnvs();
   delete (window as unknown as { google?: unknown }).google;
 });
