@@ -200,10 +200,25 @@ function loadGoogleMaps(key: string, channel: string) {
   return mapLoader;
 }
 
+/** Logged once, so the cause stays diagnosable without an error sitting over a working map. */
+let googleWarningLogged = false;
+function warnGoogleUnavailable() {
+  if (googleWarningLogged) return;
+  googleWarningLogged = true;
+  const origin = typeof window === "undefined" ? "this origin" : window.location.origin;
+  console.warn(
+    `[RescueRelay] Google Maps declined to render for ${origin}, so OpenStreetMap is rendering instead. ` +
+      "The map is fully functional either way. To use Google, check in Google Cloud Console that " +
+      `${origin} is listed under the key's Application restrictions -> Websites, that the Maps ` +
+      "JavaScript API is enabled, and that billing is active. Google logs the exact error code to " +
+      "this console just above: https://developers.google.com/maps/documentation/javascript/error-messages",
+  );
+}
+
 const SKIP_EXPLANATIONS: Record<GoogleSkipReason, string> = {
   "no-key": "No Google Maps key configured, so the keyless OpenStreetMap renderer is used.",
   "rejected-domain":
-    "Google Maps rejected this domain. Add this origin to the key's website restrictions in Google Cloud Console, or keep using OpenStreetMap, which needs no key.",
+    "Google Maps is unavailable for this domain, so OpenStreetMap is rendering instead. Both show the same rescues and road routes. The browser console explains how to enable Google.",
   unreachable: "Google Maps could not be reached, so the keyless OpenStreetMap renderer is used.",
 };
 
@@ -460,6 +475,7 @@ export function LiveMap({
     const authErrorHandler = () => {
       if (active) {
         googleMapsAuthFailed = true;
+        warnGoogleUnavailable();
         void initLeafletMap();
       }
     };
@@ -574,9 +590,6 @@ export function LiveMap({
           }
         >
           {mapEngine === "google" ? "Google Maps" : "OpenStreetMap"}
-          {mapEngine === "osm" && skipReason === "rejected-domain" && (
-            <span className="block text-destructive">Google rejected this domain</span>
-          )}
         </div>
       )}
     </div>

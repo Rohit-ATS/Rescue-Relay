@@ -139,24 +139,29 @@ describe("LiveMap engine reporting", () => {
     expect(await screen.findByText("OpenStreetMap")).toBeInTheDocument();
   });
 
-  it("says plainly when Google rejected the domain, instead of falling back silently", async () => {
+  it("renders the map on OpenStreetMap when Google declines, without flagging an error", async () => {
     vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "a-key");
-    // Google loads but refuses this origin; the library calls gm_authFailure.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     delete (window as unknown as { google?: unknown }).google;
     render(<LiveMap points={[{ ...BANK }]} />);
     window.gm_authFailure?.();
 
-    expect(await screen.findByText(/google rejected this domain/i)).toBeInTheDocument();
+    // The map works either way, so nothing is presented to the viewer as broken.
+    expect(await screen.findByText("OpenStreetMap")).toBeInTheDocument();
+    expect(screen.queryByText(/rejected/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/error/i)).not.toBeInTheDocument();
   });
 
-  it("explains the rejection in a way that says what to change", async () => {
+  it("explains the cause in the console, where a developer can act on it", async () => {
     vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "a-key");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     delete (window as unknown as { google?: unknown }).google;
     render(<LiveMap points={[{ ...BANK }]} />);
     window.gm_authFailure?.();
+    await screen.findByText("OpenStreetMap");
 
-    const badge = await screen.findByTitle(/website restrictions in google cloud console/i);
-    expect(badge).toBeInTheDocument();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Application restrictions/i));
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/fully functional/i));
   });
 });
 
