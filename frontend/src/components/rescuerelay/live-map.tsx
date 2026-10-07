@@ -29,7 +29,7 @@ declare global {
           addListener: (event: string, handler: () => void) => void;
         };
         InfoWindow: new (options?: Record<string, unknown>) => {
-          setContent: (content: string) => void;
+          setContent: (content: string | HTMLElement) => void;
           open: (options: Record<string, unknown>) => void;
           close: () => void;
         };
@@ -134,6 +134,32 @@ function escapeHtml(value: string) {
     /[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
   );
+}
+
+function createMarkerPopup(point: MapPoint, externalLink: string) {
+  const popup = document.createElement("div");
+  popup.className = "rr-map-popup";
+  popup.innerHTML =
+    `<style>
+      @keyframes rr-map-popup-in {
+        from { opacity: 0; transform: translateY(12px) scale(.94); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .rr-map-popup {
+        animation: rr-map-popup-in 220ms cubic-bezier(.16, 1, .3, 1) both;
+        color: #0a1b11;
+        font: 500 13px/1.45 system-ui, sans-serif;
+        max-width: 240px;
+        padding: 4px;
+      }
+      .rr-map-popup__title { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+      .rr-map-popup__kind { color: ${MARKER_COLORS[point.kind].fill}; font-size: 11px; font-weight: 600; letter-spacing: .04em; margin-bottom: 6px; text-transform: uppercase; }
+      .rr-map-popup__link { color: #004c25; display: inline-block; font-size: 12px; font-weight: 600; text-decoration: underline; }
+    </style>` +
+    `<div class="rr-map-popup__title">${escapeHtml(point.label)}</div>` +
+    `<div class="rr-map-popup__kind">${point.kind === "donor" ? "Pickup Location" : point.kind === "recipient" ? "Food Bank Partner" : "Food Bank · OpenStreetMap"}</div>` +
+    `<a class="rr-map-popup__link" href="${externalLink}" target="_blank" rel="noreferrer">Open in Google Maps →</a>`;
+  return popup;
 }
 
 export function getGoogleMapsDirectionsUrl(points: MapPoint[], route?: MapRoute): string {
@@ -292,13 +318,7 @@ export function LiveMap({
           });
           marker.addListener("click", () => {
             const externalLink = getGoogleMapsDirectionsUrl([p]);
-            info.setContent(
-              `<div style="font:500 13px/1.45 system-ui,sans-serif;color:#0a1b11;max-width:240px;padding:4px">` +
-                `<div style="font-weight:700;font-size:14px;margin-bottom:2px">${escapeHtml(p.label)}</div>` +
-                `<div style="color:${MARKER_COLORS[p.kind].fill};font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">${p.kind === "donor" ? "Pickup Location" : p.kind === "recipient" ? "Food Bank Partner" : "Food Bank · OpenStreetMap"}</div>` +
-                `<a href="${externalLink}" target="_blank" rel="noreferrer" style="display:inline-block;color:#004c25;font-size:12px;font-weight:600;text-decoration:underline">Open in Google Maps →</a>` +
-                `</div>`,
-            );
+            info.setContent(createMarkerPopup(p, externalLink));
             info.open({ map, anchor: marker });
           });
           markers.push(marker);
