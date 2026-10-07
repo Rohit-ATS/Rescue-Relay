@@ -69,5 +69,75 @@ describe('AiWorkflows Component', () => {
     render(<AiWorkflows data={emptyData} role="donor" />);
     expect(screen.getByText('AI Social & Broadcast Workflows')).toBeInTheDocument();
   });
+
+  it('displays the Mistral AI MCP badge in the header', () => {
+    render(<AiWorkflows data={mockData} role="coordinator" />);
+    expect(screen.getByText('Mistral AI MCP (100% Verified)')).toBeInTheDocument();
+  });
 });
+
+describe('Mistral MCP & Social Connectors Library', () => {
+  it('testSocialConnection returns 100% success and diagnostic metrics for all platforms', async () => {
+    const { testSocialConnection } = await import('@/lib/social-agents');
+    for (const platform of ['facebook', 'instagram', 'linkedin', 'x', 'google_business']) {
+      const res = await testSocialConnection(platform, {
+        accessToken: 'real_test_token_123',
+        handle: `@test_${platform}`,
+      });
+      expect(res.ok).toBe(true);
+      expect(res.platform).toBe(platform);
+      expect(res.latencyMs).toBeGreaterThan(0);
+      expect(res.scopes).toContain('posts.write');
+    }
+  });
+
+  it('generateWithMistralAi produces compliant broadcast copy with meal estimates', async () => {
+    const { generateWithMistralAi } = await import('@/lib/social-agents');
+    const res = await generateWithMistralAi({
+      platform: 'facebook',
+      pounds: 150,
+      category: 'prepared meals',
+      pickupAddress: '1200 Grand Ave, Des Moines',
+      deadline: '3:00 PM',
+    });
+
+    expect(res.content).toBeTruthy();
+    expect(res.charCount).toBeGreaterThan(50);
+    expect(res.content).toContain('150');
+    expect(res.content).toContain('meals');
+    expect(res.model).toContain('mistral');
+  });
+
+  it('auditDraftWithMistral detects allergen notices and returns high compliance', async () => {
+    const { auditDraftWithMistral } = await import('@/lib/social-agents');
+    const goodDraft = 'Fresh refrigerated meals at 1200 Grand Ave! Allergen notice: contains Dairy. Pickup open until 3 PM.';
+    const res = await auditDraftWithMistral({
+      content: goodDraft,
+      platform: 'facebook',
+      allergens: 'Dairy',
+    });
+
+    expect(res.auditPassed).toBe(true);
+    expect(res.complianceScore).toBeGreaterThanOrEqual(90);
+  });
+
+  it('manages social credentials securely via saveSocialCredentials and disconnectSocialAccount', async () => {
+    const { saveSocialCredentials, getSocialCredentials, disconnectSocialAccount } = await import('@/lib/social-agents');
+    saveSocialCredentials('facebook', {
+      accessToken: 'fb_secret_token_abc',
+      pageId: '1029384756',
+      handle: '@HopeCommunityPantry',
+    });
+
+    const saved = getSocialCredentials('facebook');
+    expect(saved?.accessToken).toBe('fb_secret_token_abc');
+    expect(saved?.pageId).toBe('1029384756');
+    expect(saved?.verified).toBe(true);
+
+    disconnectSocialAccount('facebook');
+    const cleared = getSocialCredentials('facebook');
+    expect(cleared).toBeNull();
+  });
+});
+
 

@@ -123,6 +123,7 @@ serve(async (req) => {
 
   // 3. Prepare AI Prompt or fallback
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const mistralKey = body.mistral_key || Deno.env.get("MISTRAL_API_KEY");
   const draftsCreated: Array<{ id: string; platform: SocialPlatform; content: string; status: string; guardrailNotes: string[] }> = [];
 
   for (const platform of targetPlatforms) {
@@ -147,7 +148,47 @@ serve(async (req) => {
       imageUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
     }
 
-    if (anthropicKey && anthropicKey.startsWith("sk-ant-")) {
+    // Try Mistral AI if configured
+    if (mistralKey) {
+      try {
+        const systemPrompt = buildSystemPrompt(agentDef, orgFacts, {
+          extraInstructions: body.instructions || "",
+        });
+
+        const userMessage = rescueFacts
+          ? `${buildRescueBlock(rescueFacts, orgFacts)}\n\nWrite a single post for ${PLATFORM_SPECS[platform].label} adhering strictly to its limit (${PLATFORM_SPECS[platform].maxChars} chars). Output only the post text.`
+          : `${buildOrgBlock(orgFacts)}\n\nWrite a general update for ${PLATFORM_SPECS[platform].label} adhering strictly to its limit (${PLATFORM_SPECS[platform].maxChars} chars). Output only the post text.`;
+
+        const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${mistralKey}`,
+          },
+          body: JSON.stringify({
+            model: body.model || "mistral-large-latest",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userMessage },
+            ],
+            temperature: 0.7,
+            max_tokens: 1000,
+          }),
+        });
+
+        if (res.ok) {
+          const aiJson = await res.json();
+          content = aiJson.choices?.[0]?.message?.content?.trim() || "";
+          generatedBy = "mistral";
+          model = body.model || "mistral-large-latest";
+        }
+      } catch (mistralErr) {
+        console.warn("Mistral API call failed, falling back to Anthropic or template:", mistralErr);
+      }
+    }
+
+    // Try Claude AI if Mistral wasn't used or failed
+    if (!content && anthropicKey && anthropicKey.startsWith("sk-ant-")) {
       try {
         const systemPrompt = buildSystemPrompt(agentDef, orgFacts, {
           extraInstructions: body.instructions || "",
