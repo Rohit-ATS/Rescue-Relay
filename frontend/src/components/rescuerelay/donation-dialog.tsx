@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { AddressInput } from "@/components/rescuerelay/address-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -108,6 +109,7 @@ export function DonationDialog({ onCreated }: { onCreated: () => Promise<void> }
   const [busy, setBusy] = useState(false);
   const defaultDeadline = useMemo(() => toLocalInputValue(Date.now() + 60 * 60 * 1000), []);
   const [deadline, setDeadline] = useState(defaultDeadline);
+  const [address, setAddress] = useState("");
 
   const minutesLeft = useMemo(() => {
     const at = new Date(deadline).getTime();
@@ -142,7 +144,11 @@ export function DonationDialog({ onCreated }: { onCreated: () => Promise<void> }
       } catch (serverErr) {
         // If it's an explicit validation or business error, rethrow so the user/test gets the error message
         const msg = serverErr instanceof Error ? serverErr.message : String(serverErr);
-        if (msg.includes("Address lookup") || msg.includes("Pickup deadline") || msg.includes("Only donor accounts")) {
+        if (
+          msg.includes("Address lookup") ||
+          msg.includes("Pickup deadline") ||
+          msg.includes("Only donor accounts")
+        ) {
           throw serverErr;
         }
         // Otherwise fallback to client demo store
@@ -156,6 +162,7 @@ export function DonationDialog({ onCreated }: { onCreated: () => Promise<void> }
           : "Posted. No verified recipient matches it yet — a coordinator can help.",
       );
       setOpen(false);
+      setAddress("");
       await onCreated();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not post donation.");
@@ -237,16 +244,18 @@ export function DonationDialog({ onCreated }: { onCreated: () => Promise<void> }
             <Field
               id="address"
               label="Pickup address"
-              help="Located automatically to rank nearby recipients. Include city and state."
+              help="Pick a suggestion or type it out. Located automatically to rank nearby recipients."
               wide
             >
-              <Input
+              <AddressInput
                 id="address"
                 name="address"
+                value={address}
+                onValueChange={setAddress}
                 required
                 minLength={5}
                 maxLength={240}
-                placeholder="Street address, city, state"
+                placeholder="Start typing, e.g. 400 E Locust St"
                 aria-describedby="address-help"
               />
             </Field>
@@ -305,7 +314,8 @@ export function DonationDialog({ onCreated }: { onCreated: () => Promise<void> }
                 id="allergens"
                 name="allergens"
                 maxLength={500}
-                defaultValue="Contains dairy; some meals contain wheat"
+                required
+                placeholder="e.g. Contains dairy; some meals contain wheat"
                 aria-describedby="allergens-help"
               />
             </Field>
@@ -319,7 +329,7 @@ export function DonationDialog({ onCreated }: { onCreated: () => Promise<void> }
                 id="notes"
                 name="notes"
                 maxLength={1000}
-                defaultValue="Sealed today. Keep at or below 41°F."
+                placeholder="e.g. Sealed today. Keep at or below 41°F. Dock access on the north side."
                 className="min-h-20"
                 aria-describedby="notes-help"
               />

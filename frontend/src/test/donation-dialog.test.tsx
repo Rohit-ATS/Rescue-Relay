@@ -56,6 +56,7 @@ describe("Donation dialog", () => {
 
     await user.type(screen.getByLabelText(/what is available/i), "Hot line meals");
     await user.type(screen.getByLabelText(/pickup address/i), "400 E Locust St, Des Moines, IA");
+    await user.type(screen.getByLabelText(/allergen/i), "Contains dairy");
     await user.click(screen.getByRole("button", { name: /post and find matches/i }));
 
     await waitFor(() => expect(createDonation).toHaveBeenCalledTimes(1));
@@ -77,6 +78,7 @@ describe("Donation dialog", () => {
 
     await user.type(screen.getByLabelText(/what is available/i), "Hot line meals");
     await user.type(screen.getByLabelText(/pickup address/i), "400 E Locust St");
+    await user.type(screen.getByLabelText(/allergen/i), "None");
     await user.click(screen.getByRole("button", { name: /post and find matches/i }));
 
     await waitFor(() =>
@@ -90,6 +92,7 @@ describe("Donation dialog", () => {
 
     await user.type(screen.getByLabelText(/what is available/i), "Hot line meals");
     await user.type(screen.getByLabelText(/pickup address/i), "400 E Locust St");
+    await user.type(screen.getByLabelText(/allergen/i), "None");
     await user.click(screen.getByRole("button", { name: /post and find matches/i }));
 
     await waitFor(() =>
@@ -103,11 +106,39 @@ describe("Donation dialog", () => {
 
     await user.type(screen.getByLabelText(/what is available/i), "Hot line meals");
     await user.type(screen.getByLabelText(/pickup address/i), "nowhere");
+    await user.type(screen.getByLabelText(/allergen/i), "None");
     await user.click(screen.getByRole("button", { name: /post and find matches/i }));
 
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith("Address lookup is temporarily unavailable."),
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+describe("Donation dialog safety defaults", () => {
+  it("offers allergens and handling notes as examples, not as prefilled answers", async () => {
+    await openDialog();
+
+    // Prefilled values were being posted as fact: an unedited form claimed every
+    // donation contained dairy and wheat, whatever was actually in the food.
+    expect(screen.getByLabelText(/allergen/i)).toHaveValue("");
+    expect(screen.getByLabelText(/handling notes/i)).toHaveValue("");
+    expect(screen.getByLabelText(/allergen/i)).toHaveAttribute(
+      "placeholder",
+      expect.stringMatching(/^e\.g\./),
+    );
+  });
+
+  it("will not post without a stated allergen answer", async () => {
+    const user = await openDialog();
+    createDonation.mockClear();
+
+    await user.type(screen.getByLabelText(/what is available/i), "Hot line meals");
+    await user.type(screen.getByLabelText(/pickup address/i), "400 E Locust St");
+    await user.click(screen.getByRole("button", { name: /post and find matches/i }));
+
+    expect(createDonation).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/allergen/i)).toBeRequired();
   });
 });
