@@ -173,3 +173,49 @@
   background-image: linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
   background-size: 32px 32px;
 }
+
+/* ---------- Pencil sketch layer (landing page) ---------- */
+.sketch-paper {
+  background-image:
+    radial-gradient(circle at 1px 1px, color-mix(in oklab, currentColor 9%, transparent) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+.sketch-stroke {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: url(#pencil);
+}
+.sketch-draw {
+  stroke-dasharray: var(--len, 1200);
+  stroke-dashoffset: var(--len, 1200);
+}
+.sketch-in .sketch-draw,
+.sketch-draw.sketch-auto {
+  animation: sketch-draw var(--dur, 1.8s) cubic-bezier(.6,.05,.3,1) var(--delay, 0s) forwards;
+}
+@keyframes sketch-draw { to { stroke-dashoffset: 0; } }
+
+.reveal { opacity: 0; transform: translateY(24px) rotate(-.4deg); transition: opacity .8s ease, transform .8s cubic-bezier(.2,.7,.2,1); transition-delay: var(--delay, 0s); }
+.reveal.sketch-in { opacity: 1; transform: none; }
+
+.sketch-float { animation: sketch-float 6s ease-in-out infinite; }
+@keyframes sketch-float { 0%,100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-10px) rotate(1.5deg); } }
+
+.sketch-wiggle:hover { animation: sketch-wiggle .45s ease-in-out; }
+@keyframes sketch-wiggle { 0%,100% { transform: rotate(0); } 30% { transform: rotate(-2deg); } 60% { transform: rotate(1.5deg); } }
+
+.sketch-card { position: relative; transition: transform .3s cubic-bezier(.2,.7,.2,1), box-shadow .3s; }
+.sketch-card:hover { transform: translate(-3px,-3px) rotate(-.5deg); box-shadow: 6px 6px 0 0 color-mix(in oklab, var(--color-primary) 85%, transparent); }
+
+.sketch-route-dot { offset-rotate: auto; animation: sketch-route 7s linear infinite; }
+@keyframes sketch-route { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+
+.font-hand { font-family: "Caveat", "Comic Sans MS", cursive; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sketch-draw { stroke-dashoffset: 0 !important; animation: none !important; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .sketch-float, .sketch-route-dot { animation: none; }
+}
