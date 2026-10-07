@@ -192,7 +192,7 @@ relative to when you run it, so the demo is always current.
 ## Verification
 
 ```bash
-npm run test     # 162 tests: scoring, schemas, routing, geocoding, backoff,\n                 # activity lifecycle, opportunities, partner records,\n                 # distance and routing
+npm run test     # 166 tests: scoring, schemas, routing, geocoding, backoff,\n                 # activity lifecycle, opportunities, partner records,\n                 # distance and routing
 npm run build
 npm run lint     # currently reports pre-existing Prettier formatting diffs in the
                  # generated dense-style files; `npm run format` would resolve them,

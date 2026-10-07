@@ -121,10 +121,52 @@ describe("LiveMap", () => {
     expect(await screen.findByText(/1 pickup · 1 food bank/)).toBeInTheDocument();
   });
 
-  it("explains itself when no location is configured", async () => {
+  it("still renders without a Google key, because the OpenStreetMap renderer needs none", async () => {
     vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "");
-    render(<LiveMap points={[{ ...PICKUP }]} />);
+    render(<LiveMap points={[{ ...BANK }]} />);
 
-    expect(await screen.findByText(/live map connection is not configured/i)).toBeInTheDocument();
+    // The legend only appears once a map is live, so finding it proves one rendered.
+    expect(await screen.findByText("Riverbend Food Pantry")).toBeInTheDocument();
+    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("LiveMap engine reporting", () => {
+  it("names OpenStreetMap when no Google key is configured", async () => {
+    vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "");
+    render(<LiveMap points={[{ ...BANK }]} />);
+
+    expect(await screen.findByText("OpenStreetMap")).toBeInTheDocument();
+  });
+
+  it("says plainly when Google rejected the domain, instead of falling back silently", async () => {
+    vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "a-key");
+    // Google loads but refuses this origin; the library calls gm_authFailure.
+    delete (window as unknown as { google?: unknown }).google;
+    render(<LiveMap points={[{ ...BANK }]} />);
+    window.gm_authFailure?.();
+
+    expect(await screen.findByText(/google rejected this domain/i)).toBeInTheDocument();
+  });
+
+  it("explains the rejection in a way that says what to change", async () => {
+    vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "a-key");
+    delete (window as unknown as { google?: unknown }).google;
+    render(<LiveMap points={[{ ...BANK }]} />);
+    window.gm_authFailure?.();
+
+    const badge = await screen.findByTitle(/website restrictions in google cloud console/i);
+    expect(badge).toBeInTheDocument();
+  });
+});
+
+describe("LiveMap stacking", () => {
+  it("isolates its stacking context so Leaflet controls cannot cover app chrome", async () => {
+    const { container } = render(<LiveMap points={[{ ...BANK }]} />);
+    await screen.findByText("Riverbend Food Pantry");
+
+    // Leaflet puts its panes at z-index 400 and its controls at 1000. Without an
+    // isolated stacking context those beat the sidebar tooltip at z-50.
+    expect(container.firstElementChild?.className).toContain("isolate");
   });
 });

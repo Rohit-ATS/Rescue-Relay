@@ -163,6 +163,9 @@ function ensureLeafletCss() {
 
 let mapLoader: Promise<void> | undefined;
 let googleMapsAuthFailed = false;
+/** Why the OpenStreetMap renderer is in use, so the badge can say rather than hide it. */
+type GoogleSkipReason = "no-key" | "rejected-domain" | "unreachable";
+let googleSkipReason: GoogleSkipReason | null = null;
 
 function loadGoogleMaps(key: string, channel: string) {
   if (window.google?.maps.Map) return Promise.resolve();
@@ -175,6 +178,8 @@ function loadGoogleMaps(key: string, channel: string) {
     };
     window.gm_authFailure = () => {
       googleMapsAuthFailed = true;
+      // Google authorised the key but not this origin: the referrer allow-list.
+      googleSkipReason = "rejected-domain";
       window.dispatchEvent(new Event("rescue-map-auth-error"));
     };
     const script = document.createElement("script");
@@ -186,6 +191,7 @@ function loadGoogleMaps(key: string, channel: string) {
       mapLoader = undefined;
       script.remove();
       googleMapsAuthFailed = true;
+      googleSkipReason = googleSkipReason ?? "unreachable";
       window.dispatchEvent(new Event("rescue-map-auth-error"));
       reject(new Error("Google Maps script failed to load."));
     };
@@ -193,6 +199,13 @@ function loadGoogleMaps(key: string, channel: string) {
   });
   return mapLoader;
 }
+
+const SKIP_EXPLANATIONS: Record<GoogleSkipReason, string> = {
+  "no-key": "No Google Maps key configured, so the keyless OpenStreetMap renderer is used.",
+  "rejected-domain":
+    "Google Maps rejected this domain. Add this origin to the key's website restrictions in Google Cloud Console, or keep using OpenStreetMap, which needs no key.",
+  unreachable: "Google Maps could not be reached, so the keyless OpenStreetMap renderer is used.",
+};
 
 export function LiveMap({
   compact = false,
@@ -212,6 +225,7 @@ export function LiveMap({
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [mapEngine, setMapEngine] = useState<"google" | "osm">("google");
+  const [skipReason, setSkipReason] = useState<GoogleSkipReason | null>(null);
 
   const pointsKey = JSON.stringify(points.map((p) => [p.id, p.lat, p.lng, p.label, p.kind]));
   const routeKey = JSON.stringify(route ?? null);
@@ -242,11 +256,6 @@ export function LiveMap({
 
     setError("");
     setReady(false);
-
-    if (!key) {
-      setError("Live map connection is not configured.");
-      return () => {};
-    }
 
     async function initLeafletMap() {
       if (!active || !ref.current) return;
@@ -354,6 +363,7 @@ export function LiveMap({
       }
 
       setMapEngine("osm");
+      setSkipReason(googleSkipReason);
       setReady(true);
 
       cleanup = () => {
@@ -456,7 +466,10 @@ export function LiveMap({
 
     window.addEventListener("rescue-map-auth-error", authErrorHandler);
 
-    if (googleMapsAuthFailed) {
+    // Leaflet needs no credentials, so it renders whenever Google cannot: no key
+    // configured, or a key whose referrer restrictions reject this origin.
+    if (!key || googleMapsAuthFailed) {
+      if (!key) googleSkipReason = "no-key";
       void initLeafletMap();
     } else {
       void initGoogleMap();
@@ -474,7 +487,7 @@ export function LiveMap({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-md border bg-muted ${compact ? "h-64" : "h-[420px]"}`}
+      className={`relative isolate overflow-hidden rounded-md border bg-muted ${compact ? "h-64" : "h-[420px]"}`}
     >
       <div ref={ref} className="absolute inset-0" aria-label="Rescue locations map" />
 
@@ -551,9 +564,19 @@ export function LiveMap({
         </div>
       )}
 
-      {ready && mapEngine === "osm" && (
-        <div className="absolute top-3 right-3 z-[1000] rounded border bg-background/90 px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm">
-          Live Dispatch Map
+      {ready && (
+        <div
+          className="absolute top-3 right-3 z-[1000] max-w-[14rem] rounded border bg-background/90 px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm"
+          title={
+            mapEngine === "osm"
+              ? SKIP_EXPLANATIONS[skipReason ?? "no-key"]
+              : "Rendered by Google Maps"
+          }
+        >
+          {mapEngine === "google" ? "Google Maps" : "OpenStreetMap"}
+          {mapEngine === "osm" && skipReason === "rejected-domain" && (
+            <span className="block text-destructive">Google rejected this domain</span>
+          )}
         </div>
       )}
     </div>
