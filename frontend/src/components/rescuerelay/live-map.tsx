@@ -90,7 +90,12 @@ const BASEMAP_STYLE = [
     elementType: "labels.text.fill",
     stylers: [{ color: "#4a4f46" }],
   },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#6f736a" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#4a4f46" }] },
+  {
+    featureType: "road",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#ffffff" }, { weight: 3 }],
+  },
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#6b8b93" }] },
 ];
 
@@ -411,7 +416,11 @@ export function LiveMap({
     <div
       className={`relative isolate overflow-hidden rounded-md border bg-muted ${compact ? "h-64" : "h-[420px]"}`}
     >
-      <div ref={ref} className="absolute inset-0" aria-label="Rescue locations map" />
+      <div
+        ref={ref}
+        className="rescuerelay-google-map absolute inset-0"
+        aria-label="Rescue locations map"
+      />
 
       {!ready && (
         <div className="absolute inset-0 grid place-items-center bg-map-pattern">
