@@ -71,7 +71,11 @@ const BASEMAP_STYLE = [
   { featureType: "road.highway", elementType: "geometry.fill", stylers: [{ color: "#fdf6dd" }] },
   { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#e4ca84" }] },
   { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#d9e4cd" }] },
-  { featureType: "administrative", elementType: "labels.text.fill", stylers: [{ color: "#4a4f46" }] },
+  {
+    featureType: "administrative",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#4a4f46" }],
+  },
   { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#6f736a" }] },
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#6b8b93" }] },
 ];
@@ -222,7 +226,8 @@ export function LiveMap({
     import.meta.env["VITE_GOOGLE_MAPS_API_KEY"] ||
     import.meta.env["VITE_GOOGLE_MAPS_BROWSER_KEY"] ||
     import.meta.env["VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY"];
-  const channel = import.meta.env["VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID"] || "rescuerelay";
+  const channel =
+    import.meta.env["VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID"] || "rescuerelay";
 
   useEffect(() => {
     let active = true;
@@ -260,13 +265,16 @@ export function LiveMap({
         center: [center.lat, center.lng],
         zoom: 12,
         zoomControl: true,
-        attributionControl: false,
+        // OpenStreetMap asks for visible credit, so the control stays on.
+        attributionControl: true,
       });
 
-      // CartoDB Positron: clean, muted palette matching RescueRelay design
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      // CARTO's basemaps now require an API key and watermark every tile without one.
+      // OpenStreetMap's standard tiles are keyless, which keeps the map working on any
+      // deployment with no credentials — the same principle as the geocoding chain.
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
-        subdomains: "abcd",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       }).addTo(leafletMap);
 
       const markerLayer = L.featureGroup().addTo(leafletMap);
@@ -281,7 +289,10 @@ export function LiveMap({
           popupAnchor: [0, -38],
         });
 
-        const marker = L.marker([p.lat, p.lng], { icon, zIndexOffset: p.kind === "donor" ? 100 : 50 });
+        const marker = L.marker([p.lat, p.lng], {
+          icon,
+          zIndexOffset: p.kind === "donor" ? 100 : 50,
+        });
         const popupContent =
           `<div style="font:500 13px/1.45 system-ui,sans-serif;color:#0a1b11;max-width:220px">` +
           `<div style="font-weight:700;margin-bottom:2px">${escapeHtml(p.label)}</div>` +

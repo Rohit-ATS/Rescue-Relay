@@ -303,3 +303,63 @@ export function summarizePartner(
     activeRescues: involved.filter((d) => !CLOSED_STATUSES.has(d.status)).length,
   };
 }
+
+/** A rescue as the relay board lists it. */
+type BoardRow = {
+  id: string;
+  title: string;
+  category: string;
+  pounds: number | string;
+  status: string;
+  pickup_address: string;
+  pickup_deadline: string;
+};
+
+/** Status buckets, so eight raw statuses read as four decisions. */
+export const RESCUE_STATUS_GROUPS: Record<string, string[]> = {
+  active: ["open", "matched", "accepted", "driver_assigned", "picked_up"],
+  delivered: ["delivered"],
+  closed: ["expired", "cancelled"],
+};
+
+/**
+ * Narrows the relay board by free text and status.
+ *
+ * `status` accepts a bucket name from RESCUE_STATUS_GROUPS, an exact status, or "all".
+ * The search covers title, category and pickup address, because a coordinator looking
+ * for a rescue is as likely to remember the street as the name someone typed.
+ */
+export function filterRescues<T extends BoardRow>(
+  rows: T[],
+  options: { query?: string; status?: string } = {},
+): T[] {
+  const needle = (options.query ?? "").trim().toLowerCase();
+  const status = options.status ?? "all";
+  const allowed = RESCUE_STATUS_GROUPS[status];
+
+  return rows.filter((row) => {
+    if (status !== "all") {
+      const matchesStatus = allowed ? allowed.includes(row.status) : row.status === status;
+      if (!matchesStatus) return false;
+    }
+    if (!needle) return true;
+    return (
+      row.title.toLowerCase().includes(needle) ||
+      row.category.toLowerCase().includes(needle) ||
+      row.pickup_address.toLowerCase().includes(needle) ||
+      // "driver assigned" is how the badge reads, so let it be searched that way too.
+      row.status.replaceAll("_", " ").includes(needle)
+    );
+  });
+}
+
+/** How many rescues sit in each bucket, for the filter's counts. */
+export function countRescueStatuses<T extends BoardRow>(rows: T[]): Record<string, number> {
+  const counts: Record<string, number> = { all: rows.length, active: 0, delivered: 0, closed: 0 };
+  for (const row of rows) {
+    for (const [group, statuses] of Object.entries(RESCUE_STATUS_GROUPS)) {
+      if (statuses.includes(row.status)) counts[group] = (counts[group] ?? 0) + 1;
+    }
+  }
+  return counts;
+}

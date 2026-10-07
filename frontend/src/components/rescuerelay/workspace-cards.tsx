@@ -6,6 +6,7 @@ import {
   MapPin,
   PackageCheck,
   Route as RouteIcon,
+  Search,
   Globe,
   Mail,
   Phone,
@@ -35,6 +36,7 @@ import {
 import type { RescueActivity } from "@/lib/rescue-activity";
 import type { FoodBank, Opportunity, PartnerSummary } from "@/lib/rescue-opportunities";
 import { formatClock, formatMoment as date } from "@/lib/format";
+import { countRescueStatuses, filterRescues } from "@/lib/rescue-opportunities";
 
 /** Shown when a list has nothing in it yet. */
 export function Empty({ title, copy }: { title: string; copy: string }) {
@@ -79,6 +81,8 @@ export function OpportunityCard({
   busy,
   onOpen,
   onClaim,
+  routeActive,
+  onToggleRoute,
 }: {
   opportunity: Opportunity;
   viewer: { latitude: number; longitude: number } | null;
@@ -87,8 +91,10 @@ export function OpportunityCard({
   busy: boolean;
   onOpen: (id: string) => void;
   onClaim: (matchId: string) => void;
+  /** True when the shared dispatch map is currently drawing this run. */
+  routeActive: boolean;
+  onToggleRoute: () => void;
 }) {
-  const [showRoute, setShowRoute] = useState(false);
   const [routeSummary, setRouteSummary] = useState<{ distance: string; duration: string } | null>(
     null,
   );
@@ -197,26 +203,17 @@ export function OpportunityCard({
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3">
         <p className="text-xs text-muted-foreground">
-          {routable && (o.routeMiles !== undefined || routeSummary) ? (
+          {routable && o.routeMiles !== undefined ? (
             <>
-              <Truck className="mr-1 inline size-3.5" />
-              {routeSummary ? (
-                <>
-                  {routeSummary.distance} · {routeSummary.duration} drive
-                </>
-              ) : (
-                <>
-                  ~{formatMiles(o.routeMiles as number)} ·{" "}
-                  {o.routeMinutes !== undefined ? formatMinutes(o.routeMinutes) : "—"} with handoffs
-                </>
-              )}
+              <Truck className="mr-1 inline size-3.5" />~{formatMiles(o.routeMiles)} ·{" "}
+              {o.routeMinutes !== undefined ? formatMinutes(o.routeMinutes) : "—"} with handoffs
             </>
           ) : null}
         </p>
         <div className="flex flex-wrap gap-2">
           {routable && (
-            <Button variant="ghost" size="sm" onClick={() => setShowRoute((v) => !v)}>
-              <RouteIcon /> {showRoute ? "Hide route" : "Route"}
+            <Button variant={routeActive ? "secondary" : "ghost"} size="sm" onClick={onToggleRoute}>
+              <RouteIcon /> {routeActive ? "Hide route" : "Show route"}
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => onOpen(o.donationId)}>
@@ -229,59 +226,6 @@ export function OpportunityCard({
           )}
         </div>
       </div>
-
-      {showRoute && routable && bank && (
-        <div className="space-y-2 border-t px-4 py-3">
-          <LiveMap
-            compact
-            points={[
-              {
-                id: `${o.donationId}-p`,
-                lat: o.pickup.latitude,
-                lng: o.pickup.longitude,
-                label: o.pickupAddress,
-                kind: "donor",
-              },
-              {
-                id: `${o.donationId}-d`,
-                lat: bank.latitude,
-                lng: bank.longitude,
-                label: bank.name,
-                kind: "recipient",
-              },
-            ]}
-            route={mapRoute}
-            onRouteSummary={setRouteSummary}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm">
-              <a
-                href={directionsUrl(
-                  viewer && hasPosition(viewer) ? viewer : o.pickup,
-                  { latitude: bank.latitude, longitude: bank.longitude },
-                  viewer && hasPosition(viewer) ? o.pickup : undefined,
-                )}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Google Maps
-              </a>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <a
-                href={appleDirectionsUrl(o.pickup, {
-                  latitude: bank.latitude,
-                  longitude: bank.longitude,
-                })}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Apple Maps
-              </a>
-            </Button>
-          </div>
-        </div>
-      )}
     </article>
   );
 }
@@ -399,6 +343,329 @@ export function PartnerCard({
   );
 }
 
+type RescueDetailRow = BoardRescue & {
+  allergens?: string;
+  notes?: string;
+  storage_required?: string;
+  latitude?: number;
+  longitude?: number;
+};
+
+type DetailMatch = {
+  id: string;
+  recipient_org_id: string;
+  score: number;
+  explanation: string;
+  status: string;
+};
+type DetailOrg = { id: string; name: string; address: string; latitude: number; longitude: number };
+type DetailDelivery = {
+  driver_name?: string;
+  picked_up_at?: string | null;
+  delivered_at?: string | null;
+} | null;
+
+/** A labelled fact in the rescue dialog. */
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 font-medium">{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * The whole rescue, in place.
+ *
+ * Opening a rescue used to move the viewer to another section, losing their place on
+ * the board. Everything the overview panel shows is here instead, with a way through
+ * to the full workspace for anyone who wants it.
+ */
+export function RescueDetailDialog({
+  rescue,
+  matches,
+  organizations,
+  delivery,
+  statusTone,
+  now,
+  onClose,
+  onOpenWorkspace,
+}: {
+  rescue: RescueDetailRow | null;
+  matches: DetailMatch[];
+  organizations: DetailOrg[];
+  delivery: DetailDelivery;
+  statusTone: Record<string, string>;
+  now: number;
+  onClose: () => void;
+  onOpenWorkspace: (id: string) => void;
+}) {
+  if (!rescue) return null;
+
+  const accepted = matches.find((m) => m.status === "accepted");
+  const recipient = organizations.find((o) => o.id === accepted?.recipient_org_id);
+  const deadline = deadlineLabel(rescue.pickup_deadline, now);
+  const located = hasPosition({ latitude: rescue.latitude ?? 0, longitude: rescue.longitude ?? 0 });
+
+  const points = [
+    ...(located
+      ? [
+          {
+            id: `${rescue.id}-pickup`,
+            lat: rescue.latitude as number,
+            lng: rescue.longitude as number,
+            label: rescue.pickup_address,
+            kind: "donor" as const,
+          },
+        ]
+      : []),
+    ...(recipient && hasPosition(recipient)
+      ? [
+          {
+            id: recipient.id,
+            lat: recipient.latitude,
+            lng: recipient.longitude,
+            label: recipient.name,
+            kind: "recipient" as const,
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[92vh] max-w-3xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b px-6 py-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={statusTone[rescue.status] ?? ""}>
+              {rescue.status.replaceAll("_", " ")}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={
+                deadline.urgent || deadline.closed ? "border-destructive/30 text-destructive" : ""
+              }
+            >
+              <Clock3 className="mr-1 size-3" />
+              {deadline.text}
+            </Badge>
+          </div>
+          <DialogTitle className="mt-2 text-2xl">{rescue.title}</DialogTitle>
+          <DialogDescription>
+            {Number(rescue.pounds).toLocaleString()} lb · {rescue.category}
+            {rescue.storage_required ? ` · ${rescue.storage_required}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 overflow-y-auto px-6 py-5">
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Pickup</h3>
+            <dl className="mt-3 grid gap-4 sm:grid-cols-2">
+              <Fact label="Address">{rescue.pickup_address}</Fact>
+              <Fact label="Collect by">{date(rescue.pickup_deadline)}</Fact>
+            </dl>
+            {points.length > 0 && (
+              <div className="mt-4">
+                <LiveMap compact points={points} />
+              </div>
+            )}
+          </section>
+
+          {(rescue.allergens || rescue.notes) && (
+            <section>
+              <h3 className="text-xs font-bold uppercase tracking-wide text-primary">
+                Food safety
+              </h3>
+              <dl className="mt-3 space-y-3">
+                {rescue.allergens && <Fact label="Allergens">{rescue.allergens}</Fact>}
+                {rescue.notes && <Fact label="Handling notes">{rescue.notes}</Fact>}
+              </dl>
+            </section>
+          )}
+
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-primary">
+              Recipient matches
+              <span className="ml-2 font-normal normal-case tracking-normal text-muted-foreground">
+                {matches.length}
+              </span>
+            </h3>
+            {matches.length ? (
+              <ul className="mt-3 space-y-2">
+                {matches.map((m) => {
+                  const org = organizations.find((o) => o.id === m.recipient_org_id);
+                  return (
+                    <li key={m.id} className="rounded-md border bg-muted/30 p-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="font-medium">{org?.name ?? "Recipient"}</p>
+                        <p className="text-sm font-semibold tabular-nums">
+                          {m.score}
+                          <span className="text-xs font-normal text-muted-foreground">/100</span>
+                        </p>
+                      </div>
+                      <p className="mt-0.5 text-xs capitalize text-muted-foreground">{m.status}</p>
+                      <p className="mt-1.5 text-xs text-muted-foreground">{m.explanation}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                No verified recipient matches this yet.
+              </p>
+            )}
+          </section>
+
+          {delivery && (
+            <section>
+              <h3 className="text-xs font-bold uppercase tracking-wide text-primary">Handoff</h3>
+              <dl className="mt-3 grid gap-4 sm:grid-cols-3">
+                <Fact label="Driver">{delivery.driver_name || "Unassigned"}</Fact>
+                <Fact label="Picked up">
+                  {delivery.picked_up_at ? date(delivery.picked_up_at) : "Not yet"}
+                </Fact>
+                <Fact label="Delivered">
+                  {delivery.delivered_at ? date(delivery.delivered_at) : "Not yet"}
+                </Fact>
+              </dl>
+            </section>
+          )}
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t px-6 py-4">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+          <Button
+            onClick={() => {
+              onClose();
+              onOpenWorkspace(rescue.id);
+            }}
+          >
+            Open in workspace <ArrowRight />
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type BoardRescue = {
+  id: string;
+  title: string;
+  category: string;
+  pounds: number | string;
+  status: string;
+  pickup_address: string;
+  pickup_deadline: string;
+};
+
+const BOARD_FILTERS: Array<[string, string]> = [
+  ["all", "All"],
+  ["active", "In progress"],
+  ["delivered", "Delivered"],
+  ["closed", "Closed"],
+];
+
+/** Every rescue the viewer can see, searchable and filterable by status. */
+export function RelayBoard({
+  rescues,
+  statusTone,
+  onOpen,
+}: {
+  rescues: BoardRescue[];
+  statusTone: Record<string, string>;
+  onOpen: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+
+  const counts = useMemo(() => countRescueStatuses(rescues), [rescues]);
+  const visible = useMemo(
+    () => filterRescues(rescues, { query, status }),
+    [rescues, query, status],
+  );
+
+  return (
+    <section>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">
+          Relay board
+          <span className="ml-2 text-sm font-normal text-muted-foreground">
+            {visible.length === rescues.length
+              ? `${rescues.length} rescue${rescues.length === 1 ? "" : "s"}`
+              : `${visible.length} of ${rescues.length}`}
+          </span>
+        </h2>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search rescues"
+              aria-label="Search rescues"
+              className="h-9 w-56 pl-8"
+            />
+          </div>
+          <div className="flex flex-wrap gap-1 rounded-md border p-1">
+            {BOARD_FILTERS.map(([value, label]) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={status === value ? "default" : "ghost"}
+                className="h-7"
+                aria-pressed={status === value}
+                onClick={() => setStatus(value)}
+              >
+                {label}
+                <span className="ml-1 opacity-70 tabular-nums">{counts[value] ?? 0}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {visible.length ? (
+        <div className="divide-y border-y">
+          {visible.map((d) => (
+            <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
+              <div className="min-w-0">
+                <p className="truncate font-medium">{d.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {Number(d.pounds)} lb · {date(d.pickup_deadline)}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className={statusTone[d.status] ?? ""}>
+                  {d.status.replaceAll("_", " ")}
+                </Badge>
+                <Button size="sm" variant="ghost" onClick={() => onOpen(d.id)}>
+                  Details <ArrowRight />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Empty
+          title={rescues.length ? "No rescues match that" : "No rescues yet"}
+          copy={
+            rescues.length
+              ? "Try a different search, or switch the status filter back to All."
+              : "Posted donations will appear here."
+          }
+        />
+      )}
+    </section>
+  );
+}
+
 /** The opportunities list, with filters so a volunteer can find work they can take. */
 export function OpportunityBoard({
   opportunities,
@@ -408,6 +675,7 @@ export function OpportunityBoard({
   busy,
   onOpen,
   onClaim,
+  onRouteChange,
 }: {
   opportunities: Opportunity[];
   viewer: { latitude: number; longitude: number } | null;
@@ -416,8 +684,11 @@ export function OpportunityBoard({
   busy: boolean;
   onOpen: (id: string) => void;
   onClaim: (matchId: string) => void;
+  /** Hands the shared dispatch map the run to draw, or null to show everything. */
+  onRouteChange: (opportunity: Opportunity | null) => void;
 }) {
   const [filter, setFilter] = useState<"open" | "claimable" | "awaiting" | "all">("open");
+  const [routeId, setRouteId] = useState("");
 
   const counts = useMemo(
     () => ({
@@ -467,6 +738,12 @@ export function OpportunityBoard({
             <OpportunityCard
               key={o.donationId}
               opportunity={o}
+              routeActive={routeId === o.donationId}
+              onToggleRoute={() => {
+                const next = routeId === o.donationId ? "" : o.donationId;
+                setRouteId(next);
+                onRouteChange(next ? o : null);
+              }}
               viewer={viewer}
               now={now}
               canDrive={canDrive}
