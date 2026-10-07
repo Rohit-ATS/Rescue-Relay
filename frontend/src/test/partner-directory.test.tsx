@@ -31,6 +31,7 @@ function partner(
     contactEmail: "intake@riverbendpantry-qa.org",
     website: "https://riverbendpantry-qa.org",
     hoursNote: "Mon-Sat 8am-5pm",
+    photoUrl: null,
     ...over,
   };
 }
@@ -58,6 +59,30 @@ function renderDirectory(
 }
 
 describe("Partner directory", () => {
+  it("shows the partner photo above the card when one is set", () => {
+    renderDirectory([partner({ photoUrl: "https://example.test/riverbend.jpg" })]);
+
+    const photo = screen.getByRole("img", { name: /riverbend food pantry, food bank/i });
+    expect(photo).toHaveAttribute("src", "https://example.test/riverbend.jpg");
+  });
+
+  it("draws a placeholder instead of a broken frame when a partner has no photo", () => {
+    renderDirectory([partner({ photoUrl: null })]);
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText("No photo yet")).toBeInTheDocument();
+  });
+
+  // The name and the View details button already open the partner; a photo that was
+  // also a control would be a third target with the same name.
+  it("leaves the photo out of the accessible controls", () => {
+    renderDirectory([partner({ photoUrl: "https://example.test/riverbend.jpg" })]);
+
+    expect(
+      screen.getAllByRole("button", { name: /view details for riverbend food pantry/i }),
+    ).toHaveLength(1);
+  });
+
   it("opens a partner profile from the View details button", async () => {
     const user = userEvent.setup();
     renderDirectory();
@@ -68,7 +93,9 @@ describe("Partner directory", () => {
     );
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("heading", { name: "Riverbend Food Pantry" })).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("heading", { name: "Riverbend Food Pantry" }),
+    ).toBeInTheDocument();
   });
 
   it("opens the same profile from the partner name", async () => {

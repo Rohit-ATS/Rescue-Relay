@@ -31,6 +31,8 @@ export type FoodBank = {
   contactEmail: string;
   website: string;
   hoursNote: string;
+  /** Directory photo of the site. Null when the partner has none, which the card draws a fallback for. */
+  photoUrl: string | null;
 };
 
 export type Opportunity = {
@@ -100,6 +102,8 @@ type OrganizationRow = {
   contact_email?: string | null;
   website?: string | null;
   hours_note?: string | null;
+  // Added by migration 0014; absent from the row until it is applied.
+  photo_url?: string | null;
 };
 
 type DeliveryRow = { id: string; match_id: string; driver_user_id: string | null };
@@ -133,6 +137,8 @@ export function toFoodBank(org: OrganizationRow): FoodBank {
     contactEmail: org.contact_email ?? "",
     website: org.website ?? "",
     hoursNote: org.hours_note ?? "",
+    // Empty string and null both mean "no photo"; the card only tests for null.
+    photoUrl: org.photo_url || null,
   };
 }
 

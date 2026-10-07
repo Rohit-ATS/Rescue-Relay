@@ -7,6 +7,8 @@ import {
   PackageCheck,
   Route as RouteIcon,
   Search,
+  Building2,
+  ImageOff,
   Globe,
   Mail,
   Phone,
@@ -245,101 +247,146 @@ export function PartnerCard({
 }) {
   const isRecipient = partner.type === "recipient";
   return (
-    <article className="flex flex-col rounded-md border bg-card p-5 transition-colors hover:border-primary/40">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-lg font-semibold">
-            <button
-              type="button"
-              onClick={() => onOpen(partner)}
-              className="text-left hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            >
-              {partner.name}
-            </button>
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {PARTNER_TYPE_LABELS[partner.type] ?? partner.type}
-          </p>
+    <article className="flex flex-col overflow-hidden rounded-md border bg-card transition-colors hover:border-primary/40">
+      <PartnerPhoto partner={partner} />
+      <div className="flex flex-1 flex-col p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-lg font-semibold">
+              <button
+                type="button"
+                onClick={() => onOpen(partner)}
+                className="text-left hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                {partner.name}
+              </button>
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {PARTNER_TYPE_LABELS[partner.type] ?? partner.type}
+            </p>
+          </div>
+          <Badge variant="outline" className={VERIFICATION_TONE[partner.verificationStatus] ?? ""}>
+            {partner.verificationStatus}
+          </Badge>
         </div>
-        <Badge variant="outline" className={VERIFICATION_TONE[partner.verificationStatus] ?? ""}>
-          {partner.verificationStatus}
-        </Badge>
-      </div>
 
-      <p className="mt-3 flex items-start gap-1.5 text-sm text-muted-foreground">
-        <MapPin className="mt-0.5 size-3.5 shrink-0" />
-        <span>
-          {partner.address}
-          {partner.milesAway !== undefined && (
-            <span className="block text-xs">{formatMiles(partner.milesAway)} from you</span>
-          )}
-        </span>
-      </p>
+        <p className="mt-3 flex items-start gap-1.5 text-sm text-muted-foreground">
+          <MapPin className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            {partner.address}
+            {partner.milesAway !== undefined && (
+              <span className="block text-xs">{formatMiles(partner.milesAway)} from you</span>
+            )}
+          </span>
+        </p>
 
-      {/* Capacity and cold chain only mean something for an organization that receives food. */}
-      {isRecipient ? (
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm">
-          <div>
-            <dt className="text-xs text-muted-foreground">Households served</dt>
-            <dd className="mt-0.5 font-semibold">{partner.householdsServed.toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Intake capacity</dt>
-            <dd className="mt-0.5 font-semibold">{partner.capacityLbs.toLocaleString()} lb</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Cold chain</dt>
+        {/* Capacity and cold chain only mean something for an organization that receives food. */}
+        {isRecipient ? (
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm">
+            <div>
+              <dt className="text-xs text-muted-foreground">Households served</dt>
+              <dd className="mt-0.5 font-semibold">{partner.householdsServed.toLocaleString()}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Intake capacity</dt>
+              <dd className="mt-0.5 font-semibold">{partner.capacityLbs.toLocaleString()} lb</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Cold chain</dt>
+              <dd className="mt-0.5 font-semibold">
+                {partner.coldStorage ? "Refrigerated" : "Ambient only"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Food accepted</dt>
+              <dd className="mt-0.5 font-semibold capitalize">
+                {partner.acceptedCategories.length
+                  ? partner.acceptedCategories.join(", ")
+                  : "Not specified"}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <dl className="mt-4 border-t pt-4 text-sm">
+            <dt className="text-xs text-muted-foreground">On-site storage</dt>
             <dd className="mt-0.5 font-semibold">
               {partner.coldStorage ? "Refrigerated" : "Ambient only"}
             </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Food accepted</dt>
-            <dd className="mt-0.5 font-semibold capitalize">
-              {partner.acceptedCategories.length
-                ? partner.acceptedCategories.join(", ")
-                : "Not specified"}
-            </dd>
-          </div>
-        </dl>
-      ) : (
-        <dl className="mt-4 border-t pt-4 text-sm">
-          <dt className="text-xs text-muted-foreground">On-site storage</dt>
-          <dd className="mt-0.5 font-semibold">
-            {partner.coldStorage ? "Refrigerated" : "Ambient only"}
-          </dd>
-        </dl>
-      )}
+          </dl>
+        )}
 
-      {coordinator && (
-        <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
-          {partner.verificationStatus !== "verified" && (
-            <Button size="sm" disabled={busy} onClick={() => onVerify(partner.id, "verified")}>
-              <ShieldCheck /> Verify
-            </Button>
-          )}
-          {partner.verificationStatus !== "suspended" && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => onVerify(partner.id, "suspended")}
-            >
-              <X /> Suspend
-            </Button>
-          )}
-        </div>
-      )}
-      <Button
-        variant="link"
-        size="sm"
-        className="mt-4 h-auto justify-start self-start px-0"
-        onClick={() => onOpen(partner)}
-        aria-label={`View details for ${partner.name}`}
-      >
-        View details <ArrowRight />
-      </Button>
+        {coordinator && (
+          <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
+            {partner.verificationStatus !== "verified" && (
+              <Button size="sm" disabled={busy} onClick={() => onVerify(partner.id, "verified")}>
+                <ShieldCheck /> Verify
+              </Button>
+            )}
+            {partner.verificationStatus !== "suspended" && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => onVerify(partner.id, "suspended")}
+              >
+                <X /> Suspend
+              </Button>
+            )}
+          </div>
+        )}
+        <Button
+          variant="link"
+          size="sm"
+          className="mt-4 h-auto justify-start self-start px-0"
+          onClick={() => onOpen(partner)}
+          aria-label={`View details for ${partner.name}`}
+        >
+          View details <ArrowRight />
+        </Button>
+      </div>
     </article>
+  );
+}
+
+/**
+ * The band across the top of a partner card: the site itself, so a driver has
+ * something to recognise on arrival and a donor can scan the directory by sight
+ * rather than reading every name.
+ *
+ * Deliberately not a control. The name and the "View details" button already open
+ * this partner, and a third target carrying the same accessible name would be a
+ * duplicate stop for anyone on a keyboard or a screen reader.
+ *
+ * A partner without a photo is an ordinary state, not a gap — it gets a drawn
+ * placeholder of the same height, so a grid of cards keeps its rhythm whether or
+ * not photos have been supplied. A photo that fails to load falls back to that
+ * same placeholder rather than leaving a torn image behind.
+ */
+function PartnerPhoto({ partner }: { partner: FoodBank }) {
+  const [broken, setBroken] = useState(false);
+  const label = PARTNER_TYPE_LABELS[partner.type] ?? partner.type;
+
+  if (!partner.photoUrl || broken) {
+    return (
+      <div
+        aria-hidden="true"
+        className="flex aspect-[16/7] w-full flex-col items-center justify-center gap-1 bg-muted text-muted-foreground"
+      >
+        {broken ? <ImageOff className="size-6" /> : <Building2 className="size-6" />}
+        <span className="text-xs">{broken ? "Photo unavailable" : "No photo yet"}</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={partner.photoUrl}
+      alt={`${partner.name}, ${label.toLowerCase()}`}
+      loading="lazy"
+      decoding="async"
+      onError={() => setBroken(true)}
+      className="aspect-[16/7] w-full bg-muted object-cover"
+    />
   );
 }
 

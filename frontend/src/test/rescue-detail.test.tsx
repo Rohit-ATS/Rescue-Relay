@@ -139,6 +139,7 @@ const OPPORTUNITY: Opportunity = {
     contactEmail: "",
     website: "",
     hoursNote: "",
+    photoUrl: null,
   },
   destinationConfirmed: true,
   routeMiles: 5.3,
