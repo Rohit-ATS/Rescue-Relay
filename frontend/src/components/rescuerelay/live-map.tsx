@@ -153,35 +153,6 @@ export function getGoogleMapsDirectionsUrl(points: MapPoint[], route?: MapRoute)
   return `https://www.google.com/maps/search/?api=1&query=Des+Moines,+IA`;
 }
 
-/**
- * A keyless map that works on static deployments. The legacy Google Maps
- * `output=embed` endpoint returns a 404 in many browsers unless its separate
- * Embed API is configured, so it cannot be the no-key fallback.
- *
- * OpenStreetMap's export embed accepts one marker. We keep that marker on the
- * first dispatch point and size the viewport to include every point/route end.
- */
-export function getOpenStreetMapEmbedUrl(points: MapPoint[], route?: MapRoute): string {
-  const locations = route
-    ? [route.origin, route.destination]
-    : points.length
-      ? points
-      : [{ lat: 41.5908, lng: -93.6208 }];
-  const lats = locations.map((point) => point.lat);
-  const lngs = locations.map((point) => point.lng);
-  const padding =
-    Math.max(0.008, Math.max(...lats) - Math.min(...lats), Math.max(...lngs) - Math.min(...lngs)) *
-    0.2;
-  const bbox = [
-    Math.min(...lngs) - padding,
-    Math.min(...lats) - padding,
-    Math.max(...lngs) + padding,
-    Math.max(...lats) + padding,
-  ].join(",");
-  const marker = locations[0];
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${marker.lat},${marker.lng}`)}`;
-}
-
 let mapLoader: Promise<void> | undefined;
 let googleMapsAuthFailed = false;
 
@@ -237,9 +208,6 @@ export function LiveMap({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
-  // True while the keyless iframe is standing in. It can show only one pin, so
-  // the legend must say so rather than letting a count imply pins that are not there.
-  const [embedded, setEmbedded] = useState(false);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [apiKeyInput, setApiKeyInput] = useState("");
@@ -276,38 +244,17 @@ export function LiveMap({
     setError("");
     setReady(false);
 
-    function initGoogleEmbed() {
-      if (!active || !ref.current) return;
-      setEmbedded(true);
-      ref.current.innerHTML = "";
-      const valid = pointsRef.current.filter(
-        (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng),
-      );
-      const embedUrl = getOpenStreetMapEmbedUrl(valid, routeRef.current);
-
-      const iframe = document.createElement("iframe");
-      iframe.title = "OpenStreetMap Live Dispatch";
-      iframe.src = embedUrl;
-      iframe.className = "absolute inset-0 size-full border-0";
-      iframe.loading = "lazy";
-      iframe.referrerPolicy = "no-referrer-when-downgrade";
-      iframe.allowFullscreen = true;
-
-      ref.current.appendChild(iframe);
-      setReady(true);
-    }
-
     async function initGoogleMap() {
       try {
         if (!key) {
-          initGoogleEmbed();
+          setError("A Google Maps browser API key is required to display rescue locations.");
           return;
         }
 
         await loadGoogleMaps(key, channel);
         const maps = window.google?.maps;
         if (!active || !maps || !ref.current) {
-          initGoogleEmbed();
+          setError("Google Maps could not be initialized. Check the browser API key restrictions.");
           return;
         }
 
@@ -316,7 +263,6 @@ export function LiveMap({
           (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng),
         );
 
-        setEmbedded(false);
         const map = new maps.Map(ref.current, {
           center: valid[0] ?? { lat: 41.5908, lng: -93.6208 },
           zoom: 12,
@@ -392,7 +338,9 @@ export function LiveMap({
         }
       } catch {
         if (active) {
-          initGoogleEmbed();
+          setError(
+            "Google Maps could not load. Check the browser API key and Maps JavaScript API settings.",
+          );
         }
       }
     }
@@ -400,14 +348,14 @@ export function LiveMap({
     const authErrorHandler = () => {
       if (active) {
         googleMapsAuthFailed = true;
-        initGoogleEmbed();
+        setError("Google Maps rejected the browser API key. Check its referrer restrictions.");
       }
     };
 
     window.addEventListener("rescue-map-auth-error", authErrorHandler);
 
     if (googleMapsAuthFailed) {
-      initGoogleEmbed();
+      setError("Google Maps rejected the browser API key. Check its referrer restrictions.");
     } else {
       void initGoogleMap();
     }
@@ -540,13 +488,6 @@ export function LiveMap({
                   </span>
                 )}
               </p>
-              {/* Without a Maps key the embed plots one point, so a count alone
-                  would promise pins the map cannot draw. */}
-              {embedded && points.length > 1 && (
-                <p className="mt-1 text-muted-foreground">
-                  1 of {points.length} shown · needs a Maps key
-                </p>
-              )}
             </>
           ) : (
             <p className="font-medium">
@@ -557,7 +498,7 @@ export function LiveMap({
         </div>
       )}
 
-      {ready && (
+      {(ready || error) && (
         <div className="absolute top-3 right-3 z-[1000] flex items-center gap-1.5">
           <a
             href={externalMapUrl}

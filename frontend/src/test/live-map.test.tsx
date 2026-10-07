@@ -126,22 +126,19 @@ describe("LiveMap", () => {
     expect(screen.getByText("1 food bank")).toBeInTheDocument();
   });
 
-  // Without a key the embed plots one point, so the legend must not imply more.
-  it("says how many locations the keyless map is leaving out", async () => {
+  it("asks for a Google Maps key when none is configured", async () => {
     vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "");
     render(<LiveMap points={[{ ...PICKUP }, { ...BANK }]} />);
 
-    expect(await screen.findByText(/1 of 2 shown/)).toBeInTheDocument();
+    expect(await screen.findByText(/Google Maps browser API key is required/)).toBeInTheDocument();
   });
 
-  it("renders OpenStreetMap Embed when no Google key is configured", async () => {
+  it("does not render a non-Google map when no Google key is configured", async () => {
     vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "");
     const { container } = render(<LiveMap points={[{ ...BANK }]} />);
 
-    const iframe = await waitFor(() => container.querySelector("iframe"));
-    expect(iframe).toBeInTheDocument();
-    expect(iframe?.getAttribute("src")).toContain("www.openstreetmap.org/export/embed.html");
-    expect(await screen.findByText("Riverbend Food Pantry")).toBeInTheDocument();
+    expect(await screen.findByText(/Google Maps browser API key is required/)).toBeInTheDocument();
+    expect(container.querySelector("iframe")).not.toBeInTheDocument();
   });
 });
 
@@ -155,7 +152,7 @@ describe("LiveMap engine reporting", () => {
     expect(link.getAttribute("href")).toContain("google.com/maps");
   });
 
-  it("renders OpenStreetMap Embed when Google JS declines, without flagging an error", async () => {
+  it("reports a Google Maps key rejection without rendering a fallback map", async () => {
     vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "a-key");
     delete (window as unknown as { google?: unknown }).google;
     const { container } = render(<LiveMap points={[{ ...BANK }]} />);
@@ -163,11 +160,8 @@ describe("LiveMap engine reporting", () => {
       window.gm_authFailure?.();
     });
 
-    const iframe = await waitFor(() => container.querySelector("iframe"));
-    expect(iframe).toBeInTheDocument();
-    expect(iframe?.getAttribute("src")).toContain("www.openstreetmap.org/export/embed.html");
-    expect(await screen.findByText("Riverbend Food Pantry")).toBeInTheDocument();
-    expect(screen.queryByText(/error/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/Google Maps rejected the browser API key/)).toBeInTheDocument();
+    expect(container.querySelector("iframe")).not.toBeInTheDocument();
   });
 });
 
