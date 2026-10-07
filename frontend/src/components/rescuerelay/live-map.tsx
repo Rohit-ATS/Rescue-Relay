@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 
 type MapInstance = { fitBounds: (bounds: unknown, padding?: number) => void };
-type DirectionsLeg = { distance?: { text: string }; duration?: { text: string } };
+type DirectionsLeg = { distance?: { text: string; value?: number }; duration?: { text: string } };
 type DirectionsResult = { routes?: Array<{ legs?: DirectionsLeg[] }> };
 
 declare global {
@@ -42,6 +42,7 @@ declare global {
         DirectionsRenderer: new (options: Record<string, unknown>) => {
           setMap: (map: unknown) => void;
           setDirections: (result: DirectionsResult) => void;
+          setRouteIndex: (routeIndex: number) => void;
         };
         TravelMode: { DRIVING: string };
       };
@@ -346,11 +347,21 @@ export function LiveMap({
               origin: routeData.origin,
               destination: routeData.destination,
               travelMode: maps.TravelMode.DRIVING,
+              provideRouteAlternatives: true,
             })
             .then((result) => {
               if (!active) return;
               renderer.setDirections(result);
-              const leg = result.routes?.[0]?.legs?.[0];
+              const shortestRouteIndex = (result.routes ?? []).reduce(
+                (shortest, candidate, index, routes) => {
+                  const candidateDistance = candidate.legs?.[0]?.distance?.value ?? Infinity;
+                  const shortestDistance = routes[shortest]?.legs?.[0]?.distance?.value ?? Infinity;
+                  return candidateDistance < shortestDistance ? index : shortest;
+                },
+                0,
+              );
+              renderer.setRouteIndex(shortestRouteIndex);
+              const leg = result.routes?.[shortestRouteIndex]?.legs?.[0];
               onRouteSummaryRef.current?.(
                 leg?.distance && leg.duration
                   ? { distance: leg.distance.text, duration: leg.duration.text, followsRoads: true }

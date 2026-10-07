@@ -47,6 +47,7 @@ function installFakeMapsApi() {
       DirectionsRenderer: class {
         setMap() {}
         setDirections() {}
+        setRouteIndex() {}
       },
       TravelMode: { DRIVING: "DRIVING" },
     },

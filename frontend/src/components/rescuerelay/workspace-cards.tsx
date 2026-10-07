@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   Check,
@@ -863,6 +863,8 @@ export function PartnerDetail({
   partner,
   summary,
   viewer,
+  locationStatus,
+  onRequestLocation,
   coordinator,
   busy,
   onVerify,
@@ -871,6 +873,8 @@ export function PartnerDetail({
   partner: (FoodBank & { milesAway?: number }) | null;
   summary: PartnerSummary | null;
   viewer: { latitude: number; longitude: number } | null;
+  locationStatus: "idle" | "prompting" | "granted" | "denied" | "unavailable";
+  onRequestLocation: () => void;
   coordinator: boolean;
   busy: boolean;
   onVerify: (id: string, status: "verified" | "suspended") => void;
@@ -881,9 +885,30 @@ export function PartnerDetail({
   const located = hasPosition(partner);
   const destination = { latitude: partner.latitude, longitude: partner.longitude };
   const origin = viewer && hasPosition(viewer) ? viewer : destination;
+  const [routeSummary, setRouteSummary] = useState<{
+    distance: string;
+    duration: string;
+    followsRoads?: boolean;
+  } | null>(null);
   const hasContact = Boolean(
     partner.phone || partner.contactEmail || partner.hoursNote || partner.website,
   );
+
+  useEffect(() => {
+    if (!located || !viewer || !hasPosition(viewer)) {
+      setRouteSummary(null);
+      return;
+    }
+
+    setRouteSummary(null);
+  }, [
+    destination.latitude,
+    destination.longitude,
+    located,
+    partner.id,
+    viewer?.latitude,
+    viewer?.longitude,
+  ]);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -1020,23 +1045,57 @@ export function PartnerDetail({
                       kind: isRecipient ? "recipient" : "donor",
                     },
                   ]}
+                  route={
+                    viewer && hasPosition(viewer) ? { origin: viewer, destination } : undefined
+                  }
+                  onRouteSummary={setRouteSummary}
                 />
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild variant="outline" size="sm">
-                    <a href={directionsUrl(origin, destination)} target="_blank" rel="noreferrer">
-                      Google Maps
-                    </a>
+                {viewer && hasPosition(viewer) ? (
+                  <>
+                    <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                      {routeSummary ? (
+                        <>
+                          <span className="font-medium">Driving route:</span>{" "}
+                          {routeSummary.distance} · {routeSummary.duration}
+                        </>
+                      ) : (
+                        "Finding the shortest driving route…"
+                      )}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild variant="outline" size="sm">
+                        <a
+                          href={directionsUrl(origin, destination)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Google Maps
+                        </a>
+                      </Button>
+                      <Button asChild variant="outline" size="sm">
+                        <a
+                          href={appleDirectionsUrl(origin, destination)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Apple Maps
+                        </a>
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={locationStatus === "prompting"}
+                    onClick={onRequestLocation}
+                  >
+                    <MapPin />{" "}
+                    {locationStatus === "prompting"
+                      ? "Finding your location…"
+                      : "Use my location for shortest route"}
                   </Button>
-                  <Button asChild variant="outline" size="sm">
-                    <a
-                      href={appleDirectionsUrl(origin, destination)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Apple Maps
-                    </a>
-                  </Button>
-                </div>
+                )}
               </div>
             ) : (
               <p className="mt-3 text-sm text-muted-foreground">
@@ -1192,6 +1251,8 @@ export function PartnerDirectory({
         partner={selected}
         summary={selected ? summarize(selected.id) : null}
         viewer={viewer}
+        locationStatus={locationShared ? "granted" : locating ? "prompting" : "idle"}
+        onRequestLocation={onRequestLocation}
         coordinator={coordinator}
         busy={busy}
         onVerify={onVerify}

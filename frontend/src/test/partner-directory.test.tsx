@@ -41,6 +41,7 @@ function renderDirectory(
   props: Partial<Parameters<typeof PartnerDirectory>[0]> = {},
 ) {
   const onVerify = vi.fn();
+  const onRequestLocation = vi.fn();
   render(
     <PartnerDirectory
       partners={partners}
@@ -51,11 +52,11 @@ function renderDirectory(
       viewer={null}
       summarize={() => SUMMARY}
       onVerify={onVerify}
-      onRequestLocation={vi.fn()}
+      onRequestLocation={onRequestLocation}
       {...props}
     />,
   );
-  return { onVerify };
+  return { onVerify, onRequestLocation };
 }
 
 describe("Partner directory", () => {
@@ -96,6 +97,16 @@ describe("Partner directory", () => {
     expect(
       within(dialog).getByRole("heading", { name: "Riverbend Food Pantry" }),
     ).toBeInTheDocument();
+  });
+
+  it("asks for location before calculating a route to the selected food bank", async () => {
+    const user = userEvent.setup();
+    const { onRequestLocation } = renderDirectory();
+
+    await user.click(screen.getByRole("button", { name: /view details for riverbend/i }));
+    await user.click(screen.getByRole("button", { name: /use my location for shortest route/i }));
+
+    expect(onRequestLocation).toHaveBeenCalledTimes(1);
   });
 
   it("opens the same profile from the partner name", async () => {
