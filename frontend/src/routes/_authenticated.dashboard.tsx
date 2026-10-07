@@ -19,6 +19,7 @@ import { SlideSwap } from '@/components/rescuerelay/slide-swap';
 import { buildOpportunities, listPartners, summarizePartner, type Opportunity } from '@/lib/rescue-opportunities';
 import { ActivityCard, Empty, OpportunityBoard, PartnerDirectory, RelayBoard, RescueDetailDialog } from '@/components/rescuerelay/workspace-cards';
 import { useViewerLocation } from '@/lib/use-viewer-location';
+import { appleDirectionsUrl, directionsUrl, hasPosition } from '@/lib/geo';
 export const Route=createFileRoute('/_authenticated/dashboard')({
   validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
@@ -41,7 +42,7 @@ function Dashboard(){
  const search=Route.useSearch();
  const {data,error,isPending,isFetching,refetch}=useQuery({queryKey:WORKSPACE_QUERY_KEY,queryFn:()=>fetchWorkspaceData(),refetchInterval:connection==='Live'?POLL_LIVE_MS:POLL_DEGRADED_MS,refetchOnWindowFocus:true,refetchOnReconnect:true});
  const location=useViewerLocation();
- const [routeRun,setRouteRun]=useState<Opportunity|null>(null); const [detailId,setDetailId]=useState(''); const [tab,setTab]=useState(search?.tab||'overview');const [selected,setSelected]=useState('');const [busy,setBusy]=useState(false);const [clock,setClock]=useState(Date.now());
+ const [routeRun,setRouteRun]=useState<Opportunity|null>(null);const [routeSummary,setRouteSummary]=useState<{distance:string;duration:string;followsRoads?:boolean}|null>(null); const [detailId,setDetailId]=useState(''); const [tab,setTab]=useState(search?.tab||'overview');const [selected,setSelected]=useState('');const [busy,setBusy]=useState(false);const [clock,setClock]=useState(Date.now());
  useEffect(()=>{if(search?.tab)setTab(search.tab);},[search?.tab]);
  useEffect(()=>{const onUpdated=()=>void refetch(); window.addEventListener('rescuerelay:workspace-updated', onUpdated); return ()=>window.removeEventListener('rescuerelay:workspace-updated', onUpdated);},[refetch]);
  useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),CLOCK_TICK_MS);return()=>clearInterval(timer);},[]);
@@ -87,13 +88,23 @@ function Dashboard(){
  </div>
  {location.error&&<p role="status" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{location.error}</p>}
  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
-  <OpportunityBoard opportunities={opportunities} viewer={location.coords} now={clock} canDrive={roles.includes('driver')||coordinator} busy={busy} onOpen={setDetailId} onClaim={id=>act(id,'claim')} onRouteChange={setRouteRun}/>
+  <OpportunityBoard opportunities={opportunities} viewer={location.coords} now={clock} canDrive={roles.includes('driver')||coordinator} busy={busy} onOpen={setDetailId} onClaim={id=>act(id,'claim')} onRouteChange={run=>{setRouteRun(run);setRouteSummary(null);}}/>
   <div className="space-y-3 xl:sticky xl:top-20 xl:self-start">
-   <LiveMap points={routeRun&&routeRun.foodBank?[{id:`${routeRun.donationId}-p`,lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude,label:routeRun.pickupAddress,kind:'donor'},{id:routeRun.foodBank.id,lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude,label:routeRun.foodBank.name,kind:'recipient'}]:allPoints} route={routeRun&&routeRun.foodBank?{origin:{lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude},destination:{lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude}}:undefined}/>
-   {routeRun&&routeRun.foodBank?<div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{routeRun.title} → {routeRun.foodBank.name}</p><Button variant="ghost" size="sm" onClick={()=>setRouteRun(null)}>Show all</Button></div>:<p className="text-xs text-muted-foreground">Every active pickup and food bank you can see. Choose a rescue&rsquo;s route to draw it here.</p>}
+   <LiveMap points={routeRun&&routeRun.foodBank?[{id:`${routeRun.donationId}-p`,lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude,label:routeRun.pickupAddress,kind:'donor'},{id:routeRun.foodBank.id,lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude,label:routeRun.foodBank.name,kind:'recipient'}]:allPoints} route={routeRun&&routeRun.foodBank?{origin:{lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude},destination:{lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude}}:undefined} onRouteSummary={setRouteSummary}/>
+   {routeRun&&routeRun.foodBank?<div className="space-y-3 rounded-md border bg-card p-3">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+     <div className="min-w-0"><p className="truncate text-sm font-medium">{routeRun.title}</p><p className="truncate text-xs text-muted-foreground">to {routeRun.foodBank.name}</p></div>
+     <Button variant="ghost" size="sm" onClick={()=>{setRouteRun(null);setRouteSummary(null);}}>Show all</Button>
+    </div>
+    <p className="text-sm"><Truck className="mr-1.5 inline size-4"/>{routeSummary?<>{routeSummary.distance} · {routeSummary.duration} drive{routeSummary.followsRoads===false&&<span className="text-muted-foreground"> (estimated — routing unavailable)</span>}</>:<span className="text-muted-foreground">Finding the driving route…</span>}</p>
+    <div className="flex flex-wrap gap-2">
+     <Button asChild variant="outline" size="sm"><a href={directionsUrl(location.coords&&hasPosition(location.coords)?location.coords:routeRun.pickup,{latitude:routeRun.foodBank.latitude,longitude:routeRun.foodBank.longitude},location.coords&&hasPosition(location.coords)?routeRun.pickup:undefined)} target="_blank" rel="noreferrer">Open in Google Maps <ArrowRight/></a></Button>
+     <Button asChild variant="outline" size="sm"><a href={appleDirectionsUrl(routeRun.pickup,{latitude:routeRun.foodBank.latitude,longitude:routeRun.foodBank.longitude})} target="_blank" rel="noreferrer">Apple Maps</a></Button>
+    </div>
+   </div>:<p className="text-xs text-muted-foreground">Every active pickup and food bank you can see. Choose a rescue&rsquo;s route to draw it here.</p>}
   </div>
  </div>
-</TabsContent>
+ </TabsContent>
  <TabsContent value="route" className="mt-6"><div className="grid gap-6 xl:grid-cols-2"><LiveMap points={detailPoints}/><SlideSwap swapKey={active?.id??'none'}><section>{active&&accepted?<><p className="text-xs font-bold uppercase text-primary">{delivery?'Delivery handoff':'Available assignment'}</p><h2 className="mt-2 text-2xl font-semibold">{active.title}</h2><div className="mt-6 space-y-5 border-y py-5"><Stop title="Pickup" detail={active.pickup_address} time={delivery?.picked_up_at}/><Stop title="Delivery" detail={recipient?.name??'Recipient'} time={delivery?.delivered_at}/></div><p className="mt-4 text-sm text-muted-foreground">{Number(active.pounds)} lb · {active.storage_required}</p><p className="mt-3 text-sm">Driver: {delivery?.driver_name||'Not yet assigned'}</p><p className="mt-4 border-l-2 border-info pl-3 text-sm leading-6 text-muted-foreground">Follow your organization’s food-safety policy. Pickup confirmation acknowledges that you checked the handling requirements.</p>{!delivery?.driver_user_id&&!delivery?.picked_up_at&&(role==='driver'||coordinator)&&<Button className="mt-5" disabled={busy||deadline<clock} onClick={()=>act(accepted.id,'claim')}><Truck/> Claim route</Button>}{delivery&&canHandoff&&<div className="mt-5 flex flex-wrap gap-2"><Button disabled={busy||Boolean(delivery.picked_up_at)} onClick={()=>act(delivery.id,'pickup')}><Check/> Confirm safe pickup</Button><Button disabled={busy||!delivery.picked_up_at||Boolean(delivery.delivered_at)} onClick={()=>act(delivery.id,'deliver')}><PackageCheck/> Confirm delivery</Button></div>}{delivery?.driver_user_id&&!canHandoff&&<p className="mt-5 text-sm text-muted-foreground">The assigned driver records this handoff.</p>}</>:<Empty title="No accepted route selected" copy="Choose an accepted rescue from the relay board to view its delivery."/>}<div className="mt-8"><h3 className="font-semibold">Accepted rescues</h3>{data.matches.filter(m=>m.status==='accepted').map(m=>{const d=data.donations.find(d=>d.id===m.donation_id);return d?<Button key={m.id} variant="ghost" className="mt-2 h-auto w-full justify-start whitespace-normal text-left" onClick={()=>setSelected(d.id)}>{d.title}<ArrowRight/></Button>:null;})}</div></section></SlideSwap></div></TabsContent>
  <TabsContent value="partners" className="mt-6"><PartnerDirectory partners={partners} coordinator={coordinator} busy={busy} locationShared={Boolean(location.coords)} locating={location.status==='prompting'} onVerify={changeVerification} onRequestLocation={location.request} viewer={location.coords} summarize={summarizePartnerById}/></TabsContent>
  <TabsContent value="activity" className="mt-6 space-y-10">

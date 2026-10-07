@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { MapPin, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { fetchDrivingRoute } from "@/lib/routing";
+import { formatMiles, formatMinutes } from "@/lib/geo";
 
 type MapInstance = { fitBounds: (bounds: unknown, padding?: number) => void };
 type DirectionsLeg = { distance?: { text: string }; duration?: { text: string } };
@@ -201,7 +203,9 @@ export function LiveMap({
   compact?: boolean;
   points?: MapPoint[];
   route?: MapRoute | undefined;
-  onRouteSummary?: ((summary: { distance: string; duration: string } | null) => void) | undefined;
+  onRouteSummary?:
+    | ((summary: { distance: string; duration: string; followsRoads?: boolean } | null) => void)
+    | undefined;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
@@ -310,31 +314,43 @@ export function LiveMap({
 
       const routeData = routeRef.current;
       if (routeData) {
-        L.polyline(
+        // Drawn immediately as a straight dashed line so the pair is connected while the
+        // road geometry is fetched, then replaced once the real route arrives.
+        const provisional = L.polyline(
           [
             [routeData.origin.lat, routeData.origin.lng],
             [routeData.destination.lat, routeData.destination.lng],
           ],
-          {
-            color: "#004c25",
-            weight: 5,
-            opacity: 0.85,
-            dashArray: "8, 8",
-          },
+          { color: "#004c25", weight: 4, opacity: 0.35, dashArray: "8, 8" },
         ).addTo(leafletMap);
 
-        const dLat = (routeData.destination.lat - routeData.origin.lat) * (Math.PI / 180);
-        const dLng = (routeData.destination.lng - routeData.origin.lng) * (Math.PI / 180);
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(routeData.origin.lat * (Math.PI / 180)) *
-            Math.cos(routeData.destination.lat * (Math.PI / 180)) *
-            Math.sin(dLng / 2) *
-            Math.sin(dLng / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const miles = Math.max(0.6, Math.round(3958.8 * c * 1.3 * 10) / 10);
-        const mins = Math.max(2, Math.round(miles * 2.5));
-        onRouteSummaryRef.current?.({ distance: `${miles} mi`, duration: `${mins} min` });
+        void fetchDrivingRoute(
+          { latitude: routeData.origin.lat, longitude: routeData.origin.lng },
+          { latitude: routeData.destination.lat, longitude: routeData.destination.lng },
+        ).then((driving) => {
+          if (!active) return;
+          provisional.remove();
+
+          // A casing under the route keeps it legible over busy streets.
+          L.polyline(driving.path, { color: "#ffffff", weight: 9, opacity: 0.9 }).addTo(leafletMap);
+          L.polyline(driving.path, {
+            color: "#004c25",
+            weight: 5,
+            opacity: 0.95,
+            lineJoin: "round",
+            lineCap: "round",
+            // Only a fallback stays dashed, so a straight line never reads as a real route.
+            ...(driving.followsRoads ? {} : { dashArray: "8, 8", opacity: 0.6 }),
+          }).addTo(leafletMap);
+
+          leafletMap.fitBounds(L.latLngBounds(driving.path), { padding: [45, 45], maxZoom: 15 });
+
+          onRouteSummaryRef.current?.({
+            distance: formatMiles(driving.distanceMiles),
+            duration: formatMinutes(driving.durationMinutes),
+            followsRoads: driving.followsRoads,
+          });
+        });
       }
 
       setMapEngine("osm");
