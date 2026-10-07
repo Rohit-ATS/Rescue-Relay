@@ -68,7 +68,7 @@ describe("Partner directory", () => {
     );
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Riverbend Food Pantry")).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "Riverbend Food Pantry" })).toBeInTheDocument();
   });
 
   it("opens the same profile from the partner name", async () => {
