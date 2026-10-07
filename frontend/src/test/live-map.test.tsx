@@ -134,13 +134,13 @@ describe("LiveMap", () => {
     expect(await screen.findByText(/1 of 2 shown/)).toBeInTheDocument();
   });
 
-  it("renders Google Maps Embed when no Google key is configured", async () => {
+  it("renders OpenStreetMap Embed when no Google key is configured", async () => {
     vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "");
     const { container } = render(<LiveMap points={[{ ...BANK }]} />);
 
     const iframe = await waitFor(() => container.querySelector("iframe"));
     expect(iframe).toBeInTheDocument();
-    expect(iframe?.getAttribute("src")).toContain("maps.google.com");
+    expect(iframe?.getAttribute("src")).toContain("www.openstreetmap.org/export/embed.html");
     expect(await screen.findByText("Riverbend Food Pantry")).toBeInTheDocument();
   });
 });
@@ -155,7 +155,7 @@ describe("LiveMap engine reporting", () => {
     expect(link.getAttribute("href")).toContain("google.com/maps");
   });
 
-  it("renders Google Maps Embed when Google JS declines, without flagging an error", async () => {
+  it("renders OpenStreetMap Embed when Google JS declines, without flagging an error", async () => {
     vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "a-key");
     delete (window as unknown as { google?: unknown }).google;
     const { container } = render(<LiveMap points={[{ ...BANK }]} />);
@@ -165,7 +165,7 @@ describe("LiveMap engine reporting", () => {
 
     const iframe = await waitFor(() => container.querySelector("iframe"));
     expect(iframe).toBeInTheDocument();
-    expect(iframe?.getAttribute("src")).toContain("maps.google.com");
+    expect(iframe?.getAttribute("src")).toContain("www.openstreetmap.org/export/embed.html");
     expect(await screen.findByText("Riverbend Food Pantry")).toBeInTheDocument();
     expect(screen.queryByText(/error/i)).not.toBeInTheDocument();
   });

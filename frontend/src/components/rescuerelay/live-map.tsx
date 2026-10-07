@@ -153,19 +153,33 @@ export function getGoogleMapsDirectionsUrl(points: MapPoint[], route?: MapRoute)
   return `https://www.google.com/maps/search/?api=1&query=Des+Moines,+IA`;
 }
 
-export function getGoogleMapsEmbedUrl(points: MapPoint[], route?: MapRoute): string {
-  if (route) {
-    return `https://maps.google.com/maps?saddr=${route.origin.lat},${route.origin.lng}&daddr=${route.destination.lat},${route.destination.lng}&hl=en&output=embed`;
-  }
-  if (points.length === 1 && points[0]) {
-    return `https://maps.google.com/maps?q=${points[0].lat},${points[0].lng}&hl=en&z=15&output=embed`;
-  }
-  if (points.length > 1) {
-    const lat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;
-    const lng = points.reduce((sum, p) => sum + p.lng, 0) / points.length;
-    return `https://maps.google.com/maps?q=${lat},${lng}&hl=en&z=12&output=embed`;
-  }
-  return `https://maps.google.com/maps?q=41.5908,-93.6208&hl=en&z=12&output=embed`;
+/**
+ * A keyless map that works on static deployments. The legacy Google Maps
+ * `output=embed` endpoint returns a 404 in many browsers unless its separate
+ * Embed API is configured, so it cannot be the no-key fallback.
+ *
+ * OpenStreetMap's export embed accepts one marker. We keep that marker on the
+ * first dispatch point and size the viewport to include every point/route end.
+ */
+export function getOpenStreetMapEmbedUrl(points: MapPoint[], route?: MapRoute): string {
+  const locations = route
+    ? [route.origin, route.destination]
+    : points.length
+      ? points
+      : [{ lat: 41.5908, lng: -93.6208 }];
+  const lats = locations.map((point) => point.lat);
+  const lngs = locations.map((point) => point.lng);
+  const padding =
+    Math.max(0.008, Math.max(...lats) - Math.min(...lats), Math.max(...lngs) - Math.min(...lngs)) *
+    0.2;
+  const bbox = [
+    Math.min(...lngs) - padding,
+    Math.min(...lats) - padding,
+    Math.max(...lngs) + padding,
+    Math.max(...lats) + padding,
+  ].join(",");
+  const marker = locations[0];
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${marker.lat},${marker.lng}`)}`;
 }
 
 let mapLoader: Promise<void> | undefined;
@@ -269,10 +283,10 @@ export function LiveMap({
       const valid = pointsRef.current.filter(
         (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng),
       );
-      const embedUrl = getGoogleMapsEmbedUrl(valid, routeRef.current);
+      const embedUrl = getOpenStreetMapEmbedUrl(valid, routeRef.current);
 
       const iframe = document.createElement("iframe");
-      iframe.title = "Google Maps Live Dispatch";
+      iframe.title = "OpenStreetMap Live Dispatch";
       iframe.src = embedUrl;
       iframe.className = "absolute inset-0 size-full border-0";
       iframe.loading = "lazy";
