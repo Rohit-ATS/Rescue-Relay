@@ -1260,7 +1260,7 @@ export function PartnerDirectory({
             </Button>
           ))}
         </div>
-        <div className="relative">
+        <div className="relative w-full sm:w-[26rem]">
           <Input
             value={query}
             onChange={(e) => {
@@ -1277,7 +1277,7 @@ export function PartnerDirectory({
             aria-autocomplete="list"
             aria-controls="partner-search-suggestions"
             aria-expanded={suggestionsOpen && suggestions.length > 0}
-            className="h-9 max-w-xs"
+            className="h-10 w-full"
           />
           {suggestionsOpen && suggestions.length > 0 && (
             <ul
