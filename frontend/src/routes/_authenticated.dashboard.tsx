@@ -176,7 +176,7 @@ function Dashboard(){
     </TabsList>
     {feed==='current'&&activity.current.length>0&&<p className="text-sm text-muted-foreground">{waitingCount?`${waitingCount} waiting on you`:'Nothing blocked on you'}</p>}
    </div>
-   <TabsContent value="current" className="mt-5 space-y-3 duration-200 animate-in fade-in slide-in-from-right-4">{activity.current.length?activity.current.map(a=><ActivityCard key={a.key} activity={a} now={clock} onOpen={choose} onAct={act} busy={busy}/>):<Empty title="No current activities" copy="Claim a route, accept an offer, or post surplus and it will appear here while it is in progress."/>}</TabsContent>
+   <TabsContent value="current" className="mt-5 space-y-3 duration-200 animate-in fade-in slide-in-from-right-4">{activity.current.length?activity.current.map(a=><ActivityCard key={a.key} activity={a} now={clock} onOpen={choose} onAct={act} onDelete={deleteDonation} busy={busy}/>):<Empty title="No current activities" copy="Claim a route, accept an offer, or post surplus and it will appear here while it is in progress."/>}</TabsContent>
    <TabsContent value="recent" className="mt-5 space-y-3 duration-200 animate-in fade-in slide-in-from-right-4">{activity.recent.length?activity.recent.map(a=><ActivityCard key={a.key} activity={a} now={clock} onOpen={choose} onAct={act} busy={busy}/>):<Empty title="No completed activities yet" copy="Finished rescues move here with the time they were closed."/>}</TabsContent>
   </Tabs>
  </section>

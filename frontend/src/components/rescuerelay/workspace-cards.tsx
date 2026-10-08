@@ -1378,12 +1378,14 @@ export function ActivityCard({
   now,
   onOpen,
   onAct,
+  onDelete,
   busy,
 }: {
   activity: RescueActivity;
   now: number;
   onOpen: (id: string) => void;
   onAct?: ((id: string, action: "pickup" | "deliver") => void) | undefined;
+  onDelete?: ((id: string) => void) | undefined;
   busy?: boolean;
 }) {
   const deadline = new Date(activity.deadline).getTime();
@@ -1459,6 +1461,19 @@ export function ActivityCard({
                   <Check /> Confirm delivery
                 </>
               )}
+            </Button>
+          )}
+          {activity.role === "donor" && ["open", "matched"].includes(activity.status ?? "") && onDelete && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm("Delete this surplus post? This cannot be undone.")) onDelete(activity.donationId);
+              }}
+            >
+              <Trash2 /> Delete post
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => onOpen(activity.donationId)}>

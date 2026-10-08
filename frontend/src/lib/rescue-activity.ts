@@ -15,6 +15,8 @@ export type ActivityOutcome = "delivered" | "expired" | "cancelled" | "declined"
 export type RescueActivity = {
   key: string;
   donationId: string;
+  /** Underlying rescue state, used for owner-only actions such as deleting an open post. */
+  status?: string;
   title: string;
   pounds: number;
   role: ActivityRole;
@@ -131,6 +133,7 @@ export function buildActivityFeed(
 
     const base = {
       donationId: donation.id,
+      status: donation.status,
       title: donation.title,
       pounds: toPounds(donation.pounds),
       deadline: donation.pickup_deadline,
