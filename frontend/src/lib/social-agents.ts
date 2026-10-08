@@ -237,9 +237,11 @@ export async function testSocialConnection(
 
     const mcpData = res.result || {};
     return {
-      ok: true,
+      ok: Boolean(res.isLive),
       platform,
-      message: `Successfully verified real-time connection to ${platform.toUpperCase()}`,
+      message: res.isLive
+        ? `Successfully verified real-time connection to ${platform.toUpperCase()}`
+        : `Could not reach the ${platform.toUpperCase()} MCP server — showing a simulated connection`,
       latencyMs: mcpData.latencyMs || Math.floor(25 + Math.random() * 20),
       handle: creds.handle || mcpData.handle || `@RescueRelay_${platform.toUpperCase()}`,
       scopes: mcpData.scopes || ["posts.write", "pages_read_engagement", "broadcast"],
