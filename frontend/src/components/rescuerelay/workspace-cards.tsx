@@ -1182,6 +1182,7 @@ export function PartnerDirectory({
 }) {
   const [kind, setKind] = useState<"all" | "recipient" | "donor">("all");
   const [query, setQuery] = useState("");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [selected, setSelected] = useState<(FoodBank & { milesAway?: number }) | null>(null);
 
   const counts = useMemo(
@@ -1204,6 +1205,21 @@ export function PartnerDirectory({
         p.acceptedCategories.some((c) => c.toLowerCase().includes(needle))
       );
     });
+  }, [partners, kind, query]);
+
+  const suggestions = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+    return partners
+      .filter((p) => {
+        if (kind !== "all" && p.type !== kind) return false;
+        return (
+          p.name.toLowerCase().includes(needle) ||
+          p.address.toLowerCase().includes(needle) ||
+          p.acceptedCategories.some((category) => category.toLowerCase().includes(needle))
+        );
+      })
+      .slice(0, 5);
   }, [partners, kind, query]);
 
   const filters: Array<[typeof kind, string]> = [
@@ -1244,13 +1260,54 @@ export function PartnerDirectory({
             </Button>
           ))}
         </div>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name, address or food type"
-          aria-label="Search partners"
-          className="h-9 max-w-xs"
-        />
+        <div className="relative">
+          <Input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSuggestionsOpen(true);
+            }}
+            onFocus={() => setSuggestionsOpen(true)}
+            onBlur={() => setSuggestionsOpen(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setSuggestionsOpen(false);
+            }}
+            placeholder="Search by name, address or food type"
+            aria-label="Search partners"
+            aria-autocomplete="list"
+            aria-controls="partner-search-suggestions"
+            aria-expanded={suggestionsOpen && suggestions.length > 0}
+            className="h-9 max-w-xs"
+          />
+          {suggestionsOpen && suggestions.length > 0 && (
+            <ul
+              id="partner-search-suggestions"
+              role="listbox"
+              aria-label="Partner suggestions"
+              className="absolute z-20 mt-1 w-full min-w-72 overflow-hidden rounded-md border bg-popover py-1 shadow-md"
+            >
+              {suggestions.map((partner) => (
+                <li key={partner.id} role="option" aria-selected="false">
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setQuery(partner.name);
+                      setSelected(partner);
+                      setSuggestionsOpen(false);
+                    }}
+                  >
+                    <span className="block font-medium">{partner.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {partner.type === "recipient" ? "Food bank" : "Donor"} · {partner.address}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       {visible.length ? (

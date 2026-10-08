@@ -118,6 +118,26 @@ describe("Partner directory", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
+  it("suggests matching partners while searching and opens the selected partner", async () => {
+    const user = userEvent.setup();
+    renderDirectory([
+      partner({ id: "org-1", name: "Southside Community Table" }),
+      partner({ id: "org-2", name: "Court Avenue Kitchen", type: "donor" }),
+    ]);
+
+    await user.type(screen.getByLabelText(/search partners/i), "court");
+    expect(screen.getByRole("listbox", { name: /partner suggestions/i })).toHaveTextContent(
+      "Court Avenue Kitchen",
+    );
+
+    await user.click(
+      within(screen.getByRole("listbox", { name: /partner suggestions/i })).getByRole("button", {
+        name: /court avenue kitchen/i,
+      }),
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent("Court Avenue Kitchen");
+  });
+
   it("shows the contact details a donor needs to call ahead", async () => {
     const user = userEvent.setup();
     renderDirectory();
