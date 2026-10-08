@@ -31,9 +31,9 @@ describe("security hardening boundaries", () => {
       "REVOKE INSERT ON TABLE public.donations, public.matches, public.rescue_events FROM authenticated",
     );
     expect(creationHandler).toContain('await import("@/integrations/supabase/client.server")');
-    expect(creationHandler).toContain('supabaseAdmin.from("donations").insert');
-    expect(creationHandler).toContain('supabaseAdmin.from("matches").insert');
-    expect(creationHandler).toContain('supabaseAdmin.from("rescue_events").insert');
+    expect(creationHandler).toMatch(/supabaseAdmin\s*\.from\("donations"\)\s*\.insert/);
+    expect(creationHandler).toMatch(/supabaseAdmin\s*\.from\("matches"\)\s*\.insert/);
+    expect(creationHandler).toMatch(/supabaseAdmin\s*\.from\("rescue_events"\)\s*\.insert/);
   });
 
   it("requires coordinator authority to disconnect a social account", () => {
