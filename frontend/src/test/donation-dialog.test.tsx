@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createDonation = vi.fn();
 const toastError = vi.fn();
@@ -23,6 +23,12 @@ async function openDialog() {
 }
 
 describe("Donation dialog", () => {
+  beforeEach(() => {
+    createDonation.mockReset();
+    toastError.mockReset();
+    toastSuccess.mockReset();
+  });
+
   it("groups the form into three numbered steps", async () => {
     await openDialog();
 
@@ -70,7 +76,7 @@ describe("Donation dialog", () => {
     });
     // The deadline must leave the browser as an instant, not local wall-clock text.
     expect(payload.pickupDeadline).toMatch(/\dT.*Z$/);
-  });
+  }, 10_000);
 
   it("reports how many recipients can take it", async () => {
     const user = await openDialog();

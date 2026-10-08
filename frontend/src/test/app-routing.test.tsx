@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter, rootRouteId } from "@tanstack/react-router";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { routeTree } from "@/routeTree.gen";
@@ -13,5 +14,14 @@ describe("App routing", () => {
     const matches = router.matchRoutes("/");
 
     expect(matches.at(-1)?.routeId).not.toBe(rootRouteId);
+  });
+
+  it("keeps real sign-in available while the protected layout owns demo mode", () => {
+    const root = readFileSync("src/routes/__root.tsx", "utf8");
+    const protectedLayout = readFileSync("src/routes/_authenticated/route.tsx", "utf8");
+
+    expect(root).not.toContain("Instant Demo Guest Evaluator");
+    expect(root).not.toContain("setUser(demoUser)");
+    expect(protectedLayout).toContain("demoOnly: true");
   });
 });

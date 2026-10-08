@@ -69,7 +69,7 @@ describe("Workspace hydration tolerates older state", () => {
     expect(Array.isArray(requests)).toBe(true);
   });
 
-  it("does not lose the donations an older workspace did carry", async () => {
+  it("keeps an older local workspace in demo mode, even if public data exists", async () => {
     const { fetchWorkspaceData } = await import("@/lib/rescue-client");
     localStorage.setItem(
       KEY,
@@ -79,8 +79,20 @@ describe("Workspace hydration tolerates older state", () => {
     const workspace = await fetchWorkspaceData();
     expect(workspace.donations.map((d) => d.id)).toContain("kept-donation");
     expect(workspace.userId).toBe("someone");
+    expect(workspace.donations.find((d) => d.id === "kept-donation")).toMatchObject({
+      title: "Saved surplus donation",
+      pickup_address: "Pickup address unavailable",
+      storage_required: "ambient",
+    });
     // Every collection is present, whatever the stored shape was.
-    for (const key of ["roles", "organizations", "matches", "deliveries", "events", "membershipRequests"] as const) {
+    for (const key of [
+      "roles",
+      "organizations",
+      "matches",
+      "deliveries",
+      "events",
+      "membershipRequests",
+    ] as const) {
       expect(Array.isArray(workspace[key])).toBe(true);
     }
   });
@@ -88,7 +100,12 @@ describe("Workspace hydration tolerates older state", () => {
   it("survives a stored workspace whose collections are the wrong type", async () => {
     localStorage.setItem(
       KEY,
-      JSON.stringify({ donations: [{ id: "d1" }], roles: "not-an-array", events: null, membershipRequests: 7 }),
+      JSON.stringify({
+        donations: [{ id: "d1" }],
+        roles: "not-an-array",
+        events: null,
+        membershipRequests: 7,
+      }),
     );
 
     const { fetchWorkspaceData } = await import("@/lib/rescue-client");

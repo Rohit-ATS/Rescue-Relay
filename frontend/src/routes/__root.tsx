@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from '@supabase/supabase-js';
-import { AuthContext, type AppRole, type UserProfile, type UserRoleRow } from '@/lib/auth-context';
+import { AuthContext, type UserProfile, type UserRoleRow } from '@/lib/auth-context';
 import { LiveSyncProvider, WORKSPACE_QUERY_KEY } from '@/lib/live-sync';
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
@@ -221,34 +221,12 @@ function RootComponent() {
           void supabase.realtime.setAuth(initialSession.access_token);
         }
       } else {
-        // Instant Demo Guest Evaluator
-        const demoUser = {
-          id: "d0000000-0000-4000-a000-000000000004",
-          email: "demo-evaluator@local.invalid",
-          app_metadata: {},
-          user_metadata: { full_name: "Casey Ahmed (Judge Evaluator)" },
-          aud: "authenticated",
-          created_at: new Date().toISOString(),
-        } as unknown as User;
-        setUser(demoUser);
-        setProfile({
-          id: "d0000000-0000-4000-a000-000000000004",
-          full_name: "Casey Ahmed",
-          phone: "515-555-0104",
-          organization_id: "d2000000-0000-4000-a000-000000000008",
-          onboarding_complete: true,
-          availability: true,
-          vehicle_capacity_lbs: 400,
-          food_safety_training: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-        setRoleRows([
-          { id: "r-c", user_id: "d0000000-0000-4000-a000-000000000004", role: "coordinator" },
-          { id: "r-d", user_id: "d0000000-0000-4000-a000-000000000004", role: "donor" },
-          { id: "r-r", user_id: "d0000000-0000-4000-a000-000000000004", role: "recipient" },
-          { id: "r-v", user_id: "d0000000-0000-4000-a000-000000000004", role: "driver" },
-        ]);
+        // The protected layout supplies its own local-only demo workspace. Keep the
+        // app-wide auth state empty here so /auth remains reachable for real users.
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setRoleRows([]);
         setLoading(false);
       }
     });

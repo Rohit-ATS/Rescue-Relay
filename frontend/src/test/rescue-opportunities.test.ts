@@ -116,13 +116,19 @@ describe("Volunteer opportunities", () => {
     expect(opportunity?.claimedByUserId).toBe("other");
   });
 
-  it("stops offering a run whose pickup window has closed", () => {
-    const [opportunity] = buildOpportunities(
-      inputs({ donations: [donation({ pickup_deadline: PAST })] }),
-      NOW,
-    );
-    expect(opportunity?.expired).toBe(true);
-    expect(opportunity?.claimable).toBe(false);
+  it("leaves out a run whose pickup window has closed", () => {
+    expect(
+      buildOpportunities(inputs({ donations: [donation({ pickup_deadline: PAST })] }), NOW),
+    ).toEqual([]);
+  });
+
+  it("does not offer a run at its exact pickup deadline", () => {
+    expect(
+      buildOpportunities(
+        inputs({ donations: [donation({ pickup_deadline: new Date(NOW).toISOString() })] }),
+        NOW,
+      ),
+    ).toEqual([]);
   });
 
   it("leaves out rescues that are already finished", () => {

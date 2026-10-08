@@ -57,6 +57,13 @@ function normalizeWorkspace(input: unknown): WorkspaceData {
 
   const array = <T,>(value: unknown, fallback: T[]): T[] => (Array.isArray(value) ? (value as T[]) : fallback);
 
+  const text = (value: unknown, fallback: string) =>
+    typeof value === "string" && value.trim() ? value : fallback;
+  const number = (value: unknown, fallback: number) =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  const timestamp = (value: unknown, fallback: string) =>
+    typeof value === "string" && Number.isFinite(new Date(value).getTime()) ? value : fallback;
+
   /**
    * Drops records that are missing the keys every screen dereferences.
    *
@@ -72,10 +79,51 @@ function normalizeWorkspace(input: unknown): WorkspaceData {
     return kept as T[];
   };
 
+  /**
+   * Earlier demo builds saved only `id` and `status` for donations. Preserve those
+   * records, but fill every field the dashboard, map, and activity feed read.
+   */
+  const donations = (rows: unknown): Donation[] => {
+    if (!Array.isArray(rows)) return base.donations;
+
+    const now = new Date().toISOString();
+    return rows.flatMap((row): Donation[] => {
+      if (!row || typeof row !== "object") return [];
+      const donation = row as Record<string, unknown>;
+      if (typeof donation.id !== "string" || !donation.id || typeof donation.status !== "string")
+        return [];
+
+      return [
+        {
+          id: donation.id,
+          donor_user_id: typeof donation.donor_user_id === "string" ? donation.donor_user_id : null,
+          donor_org_id: typeof donation.donor_org_id === "string" ? donation.donor_org_id : null,
+          title: text(donation.title, "Saved surplus donation"),
+          category: text(donation.category, "other"),
+          pounds: number(donation.pounds, 0),
+          servings:
+            typeof donation.servings === "number" && Number.isFinite(donation.servings)
+              ? donation.servings
+              : null,
+          pickup_address: text(donation.pickup_address, "Pickup address unavailable"),
+          pickup_deadline: timestamp(donation.pickup_deadline, now),
+          storage_required: text(donation.storage_required, "ambient"),
+          allergens: typeof donation.allergens === "string" ? donation.allergens : "",
+          notes: typeof donation.notes === "string" ? donation.notes : "",
+          latitude: number(donation.latitude, 41.5908),
+          longitude: number(donation.longitude, -93.6208),
+          status: donation.status as Donation["status"],
+          photo_url: typeof donation.photo_url === "string" ? donation.photo_url : null,
+          created_at: timestamp(donation.created_at, now),
+        },
+      ];
+    });
+  };
+
   return {
     profile: partial.profile ?? base.profile,
     roles: array(partial.roles, base.roles),
-    donations: wellFormed(partial.donations, ["id", "status", "pickup_deadline"], base.donations),
+    donations: donations(partial.donations),
     organizations: wellFormed(partial.organizations, ["id", "name", "type"], base.organizations),
     matches: wellFormed(partial.matches, ["id", "donation_id", "status"], base.matches),
     deliveries: wellFormed(partial.deliveries, ["id", "match_id"], base.deliveries),
@@ -161,15 +209,17 @@ function ensureDemoSync() {
 
 /**
  * Fetch workspace data with resilient fallback to rich demo data.
- * If Supabase tables contain rows, uses Supabase data.
- * Otherwise, uses the interactive local store that persists live actions.
+ * A real signed-in account reads Supabase; an unauthenticated demo always uses
+ * the interactive local store that persists its live actions.
  */
 export async function fetchWorkspaceData(): Promise<WorkspaceData> {
   // A screen that never writes still needs to receive what the others post.
   ensureDemoSync();
   try {
-    const [sessionRes, donationsRes, orgsRes, matchesRes, deliveriesRes, eventsRes] = await Promise.all([
-      supabase.auth.getSession(),
+    const sessionRes = await supabase.auth.getSession();
+    if (!sessionRes.data.session?.user) return getStoredWorkspace();
+
+    const [donationsRes, orgsRes, matchesRes, deliveriesRes, eventsRes] = await Promise.all([
       supabase.from("donations").select("*").order("pickup_deadline"),
       supabase.from("organizations").select("*").order("name"),
       supabase.from("matches").select("*").order("score", { ascending: false }),
@@ -192,7 +242,7 @@ export async function fetchWorkspaceData(): Promise<WorkspaceData> {
         events: (eventsRes.data ?? []) as RescueEvent[],
         membershipRequests: getStoredWorkspace().membershipRequests,
         // Use the real signed-in user for owner-only controls such as deleting a post.
-        userId: sessionRes.data.session?.user.id ?? DEMO_USER_ID,
+        userId: sessionRes.data.session.user.id,
       };
     }
   } catch (err) {

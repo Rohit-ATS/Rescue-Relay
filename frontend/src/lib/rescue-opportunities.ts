@@ -207,6 +207,8 @@ export function buildOpportunities(
 
   for (const donation of donations) {
     if (CLOSED_STATUSES.has(donation.status)) continue;
+    const expired = new Date(donation.pickup_deadline).getTime() <= now;
+    if (expired) continue;
 
     const donationMatches = matchesByDonation.get(donation.id) ?? [];
     const accepted = donationMatches.find((m) => m.status === "accepted");
@@ -221,7 +223,6 @@ export function buildOpportunities(
 
     const pickup: Coords = { latitude: donation.latitude, longitude: donation.longitude };
     const claimedBy = accepted ? claimedMatchIds.get(accepted.id) : undefined;
-    const expired = new Date(donation.pickup_deadline).getTime() < now;
 
     const pounds = typeof donation.pounds === "string" ? Number(donation.pounds) : donation.pounds;
 

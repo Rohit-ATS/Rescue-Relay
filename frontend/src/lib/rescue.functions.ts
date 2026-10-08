@@ -35,7 +35,7 @@ export const getWorkspace = createServerFn({ method: "GET" })
 
 export const completeOnboarding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => onboardingSchema.parse(input))
+  .validator((input: unknown) => onboardingSchema.parse(input))
   .handler(async ({ data, context }) => {
     const requestMembership = data.role === "donor" || data.role === "recipient";
     const { error } = requestMembership
@@ -83,7 +83,7 @@ export const getPendingMembershipRequests = createServerFn({ method: "GET" })
 
 export const approveMembershipRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => membershipRequestIdSchema.parse(input))
+  .validator((input: unknown) => membershipRequestIdSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.rpc("approve_organization_membership_request", { _request_id: data.requestId });
     if (error) throw new Error(error.message);
@@ -92,7 +92,7 @@ export const approveMembershipRequest = createServerFn({ method: "POST" })
 
 export const createDonation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => donationSchema.parse(input))
+  .validator((input: unknown) => donationSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { data: canDonate } = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "donor" });
     if (!canDonate) throw new Error("Only donor accounts can post donations.");
@@ -147,7 +147,7 @@ export const createDonation = createServerFn({ method: "POST" })
 
 export const updateRescue = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => zUpdate.parse(input))
+  .validator((input: unknown) => zUpdate.parse(input))
   .handler(async ({ data, context }) => {
     const { data: roleRows } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
     const roles = new Set((roleRows ?? []).map((row) => row.role));
@@ -176,7 +176,7 @@ const zUpdate = z.object({ id: z.string().uuid(), action: z.enum(["accept", "dec
 
 export const verifyPartner = createServerFn({method:'POST'})
  .middleware([requireSupabaseAuth])
- .inputValidator((input:unknown)=>z.object({id:z.string().uuid(),status:z.enum(['pending','verified','suspended'])}).parse(input))
+ .validator((input:unknown)=>z.object({id:z.string().uuid(),status:z.enum(['pending','verified','suspended'])}).parse(input))
  .handler(async({data,context})=>{
   const {data:allowed,error:roleError}=await context.supabase.rpc('has_role',{_user_id:context.userId,_role:'coordinator'});
   if(roleError||!allowed)throw new Error('Coordinator access required.');
