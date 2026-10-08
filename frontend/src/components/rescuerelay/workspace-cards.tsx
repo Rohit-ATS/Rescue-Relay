@@ -13,6 +13,7 @@ import {
   Mail,
   Phone,
   ShieldCheck,
+  Trash2,
   Truck,
   X,
   type LucideIcon,
@@ -83,6 +84,8 @@ export function OpportunityCard({
   busy,
   onOpen,
   onClaim,
+  canDelete,
+  onDelete,
   routeActive,
   onToggleRoute,
 }: {
@@ -93,6 +96,8 @@ export function OpportunityCard({
   busy: boolean;
   onOpen: (id: string) => void;
   onClaim: (matchId: string) => void;
+  canDelete: boolean;
+  onDelete: (donationId: string) => void;
   /** True when the shared dispatch map is currently drawing this run. */
   routeActive: boolean;
   onToggleRoute: () => void;
@@ -221,6 +226,18 @@ export function OpportunityCard({
           <Button variant="outline" size="sm" onClick={() => onOpen(o.donationId)}>
             Details <ArrowRight />
           </Button>
+          {canDelete && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => {
+                if (window.confirm("Delete this surplus post? This cannot be undone.")) onDelete(o.donationId);
+              }}
+            >
+              <Trash2 /> Delete post
+            </Button>
+          )}
           {canDrive && o.claimable && o.matchId && (
             <Button
               size="sm"
@@ -729,6 +746,8 @@ export function OpportunityBoard({
   busy,
   onOpen,
   onClaim,
+  userId,
+  onDelete,
   onRouteChange,
 }: {
   opportunities: Opportunity[];
@@ -738,6 +757,8 @@ export function OpportunityBoard({
   busy: boolean;
   onOpen: (id: string) => void;
   onClaim: (matchId: string) => void;
+  userId: string;
+  onDelete: (donationId: string) => void;
   /** Hands the shared dispatch map the run to draw, or null to show everything. */
   onRouteChange: (opportunity: Opportunity | null) => void;
 }) {
@@ -804,6 +825,8 @@ export function OpportunityBoard({
               busy={busy}
               onOpen={onOpen}
               onClaim={onClaim}
+              canDelete={o.donorUserId === userId && ["open", "matched"].includes(o.status)}
+              onDelete={onDelete}
             />
           ))}
         </div>

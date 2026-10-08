@@ -37,6 +37,8 @@ export type FoodBank = {
 
 export type Opportunity = {
   donationId: string;
+  /** The donor who posted this rescue; used to expose owner-only controls. */
+  donorUserId?: string | null;
   title: string;
   category: string;
   pounds: number;
@@ -66,6 +68,7 @@ export type Opportunity = {
 
 type DonationRow = {
   id: string;
+  donor_user_id?: string | null;
   title: string;
   category: string;
   pounds: number | string;
@@ -224,6 +227,7 @@ export function buildOpportunities(
 
     results.push({
       donationId: donation.id,
+      donorUserId: donation.donor_user_id ?? null,
       title: donation.title,
       category: donation.category,
       pounds: Number.isFinite(pounds) ? pounds : 0,

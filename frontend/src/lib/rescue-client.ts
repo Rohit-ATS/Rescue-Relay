@@ -342,6 +342,34 @@ export async function performRescueAction(
 }
 
 /**
+ * Remove an unclaimed surplus post created by the active demo user.
+ *
+ * Matches, delivery stubs, and activity entries belong to the post, so remove
+ * them as one unit instead of leaving orphaned items in the shared workspace.
+ */
+export async function deleteOwnDonation(id: string): Promise<{ ok: boolean }> {
+  const current = getStoredWorkspace();
+  const donation = current.donations.find((item) => item.id === id);
+
+  if (!donation) throw new Error("This surplus post is no longer available.");
+  if (donation.donor_user_id !== current.userId) {
+    throw new Error("Only the person who posted this surplus can delete it.");
+  }
+  if (!['open', 'matched'].includes(donation.status)) {
+    throw new Error("A post can only be deleted before a recipient accepts it.");
+  }
+
+  const matchIds = new Set(current.matches.filter((match) => match.donation_id === id).map((match) => match.id));
+  current.donations = current.donations.filter((item) => item.id !== id);
+  current.matches = current.matches.filter((match) => match.donation_id !== id);
+  current.deliveries = current.deliveries.filter((delivery) => !matchIds.has(delivery.match_id));
+  current.events = current.events.filter((event) => event.donation_id !== id);
+  saveWorkspace(current);
+
+  return { ok: true };
+}
+
+/**
  * Verify a partner organization.
  */
 export async function updatePartnerVerification(

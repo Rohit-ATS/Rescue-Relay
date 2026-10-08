@@ -162,6 +162,8 @@ describe("Opportunity route hand-off", () => {
         busy={false}
         onOpen={vi.fn()}
         onClaim={vi.fn()}
+        userId="viewer"
+        onDelete={vi.fn()}
         onRouteChange={onRouteChange}
       />,
     );
@@ -185,6 +187,8 @@ describe("Opportunity route hand-off", () => {
         busy={false}
         onOpen={vi.fn()}
         onClaim={vi.fn()}
+        userId="viewer"
+        onDelete={vi.fn()}
         onRouteChange={onRouteChange}
       />,
     );

@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { fetchWorkspaceData, performRescueAction, updatePartnerVerification } from '@/lib/rescue-client';
+import { deleteOwnDonation, fetchWorkspaceData, performRescueAction, updatePartnerVerification } from '@/lib/rescue-client';
 import { buildActivityFeed, type RescueActivity } from '@/lib/rescue-activity';
 import { fetchPublicFoodBanks, type PublicFoodBank } from '@/lib/food-banks';
 import { DonationDialog } from '@/components/rescuerelay/donation-dialog';
@@ -94,6 +94,7 @@ function Dashboard(){
   setBusy(true);try{await performRescueAction(id,action);toast.success({accept:'Rescue accepted',decline:'Match declined',unsafe:'Match flagged unsafe',claim:'Route assigned',pickup:'Pickup recorded',deliver:'Delivery recorded'}[action]);await refresh();}catch(err){toast.error(err instanceof Error?err.message:'Action failed');}finally{setBusy(false);}
  }
  async function changeVerification(id:string,status:'verified'|'suspended'){setBusy(true);try{await updatePartnerVerification(id,status);toast.success('Partner verification updated');await refresh();}catch(err){toast.error(err instanceof Error?err.message:'Update failed');}finally{setBusy(false);}}
+ async function deleteDonation(id:string){setBusy(true);try{await deleteOwnDonation(id);if(routeRun?.donationId===id){setRouteRun(null);setRouteSummary(null);}if(detailId===id)setDetailId('');if(selected===id)setSelected('');toast.success('Surplus post deleted');await refresh();}catch(err){toast.error(err instanceof Error?err.message:'Could not delete surplus post');}finally{setBusy(false);}}
  if(isPending||(data&&!data.roles.length))return <div className="grid min-h-screen place-items-center"><p role="status" className="text-muted-foreground">Opening your workspace…</p></div>;
  if(!data)return <div className="grid min-h-screen place-items-center p-6"><div className="max-w-md text-center"><AlertTriangle className="mx-auto size-10 text-destructive"/><h1 className="mt-4 text-2xl font-semibold">Workspace unavailable</h1><p className="mt-3 text-muted-foreground">{error instanceof Error?error.message:'Please try again.'}</p><Button onClick={refresh} className="mt-5"><RefreshCw/> Try again</Button></div></div>;
  function choose(id:string){setSelected(id);setTab('overview');}
@@ -113,7 +114,7 @@ function Dashboard(){
  </div>
  {location.error&&<p role="status" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{location.error}</p>}
  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
-  <OpportunityBoard opportunities={opportunities} viewer={location.coords} now={clock} canDrive={roles.includes('driver')||coordinator} busy={busy} onOpen={setDetailId} onClaim={id=>{if(!location.coords)location.request();void act(id,'claim');}} onRouteChange={run=>{setRouteRun(run);setRouteSummary(null);}}/>
+  <OpportunityBoard opportunities={opportunities} viewer={location.coords} now={clock} canDrive={roles.includes('driver')||coordinator} busy={busy} onOpen={setDetailId} onClaim={id=>{if(!location.coords)location.request();void act(id,'claim');}} userId={data.userId} onDelete={deleteDonation} onRouteChange={run=>{setRouteRun(run);setRouteSummary(null);}}/>
   <div className="space-y-3 xl:sticky xl:top-20 xl:self-start">
    <LiveMap points={routeRun&&routeRun.foodBank?[...(location.coords&&hasPosition(location.coords)?[{id:'viewer-location',lat:location.coords.latitude,lng:location.coords.longitude,label:'Your location',kind:'donor' as const}]:[]),{id:`${routeRun.donationId}-p`,lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude,label:routeRun.pickupAddress,kind:'donor'},{id:routeRun.foodBank.id,lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude,label:routeRun.foodBank.name,kind:'recipient'}]:allPoints} route={routeRun&&routeRun.foodBank?location.coords&&hasPosition(location.coords)?{origin:{lat:location.coords.latitude,lng:location.coords.longitude},waypoints:[{lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude}],destination:{lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude}}:{origin:{lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude},destination:{lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude}}:undefined} onRouteSummary={setRouteSummary}/>
    {routeRun&&routeRun.foodBank?<div className="space-y-3 rounded-md border bg-card p-3">
