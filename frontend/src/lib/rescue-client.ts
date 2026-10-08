@@ -536,6 +536,51 @@ export async function postNewDonation(data: {
   return { id: newId, matches: candidates.length };
 }
 
+/**
+ * Completes the organization step in the browser-only hackathon demo.
+ *
+ * This is deliberately separate from the real onboarding RPC: production
+ * memberships still stay pending until a coordinator reviews them. The demo
+ * has no authenticated database session, so simulating approval locally lets
+ * evaluators try every role without a second person or an invite.
+ */
+export async function completeDemoOnboarding(data: {
+  fullName: string;
+  role: "donor" | "recipient" | "driver";
+  organizationId?: string;
+}): Promise<{ ok: true; autoApproved: boolean }> {
+  const fullName = data.fullName.trim();
+  if (fullName.length < 2 || fullName.length > 100) throw new Error("Enter a name between 2 and 100 characters.");
+
+  const current = getStoredWorkspace();
+  const needsOrganization = data.role === "donor" || data.role === "recipient";
+  const organization = needsOrganization
+    ? current.organizations.find((item) => item.id === data.organizationId)
+    : null;
+  if (needsOrganization && (!organization || organization.type !== data.role || organization.verification_status === "suspended")) {
+    throw new Error("Choose an available organization for this role.");
+  }
+
+  const profile = current.profile ?? INITIAL_PROFILES[0];
+  if (!profile) throw new Error("Demo profile is unavailable.");
+
+  current.profile = {
+    ...profile,
+    id: current.userId,
+    full_name: fullName,
+    organization_id: organization?.id ?? null,
+    onboarding_complete: true,
+    availability: data.role === "driver",
+    vehicle_capacity_lbs: data.role === "driver" ? Math.max(profile.vehicle_capacity_lbs, 250) : profile.vehicle_capacity_lbs,
+    food_safety_training: data.role === "driver" ? true : profile.food_safety_training,
+    updated_at: new Date().toISOString(),
+  };
+  current.roles = [{ id: `demo-role-${data.role}`, user_id: current.userId, role: data.role }];
+  saveWorkspace(current);
+
+  return { ok: true, autoApproved: needsOrganization };
+}
+
 /** Reset demo data to fresh seed state anytime. */
 export function resetDemoWorkspace(): void {
   if (typeof window === "undefined") return;

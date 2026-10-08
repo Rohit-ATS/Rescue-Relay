@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 
 import {
   approveMembershipRequestLocally,
+  completeDemoOnboarding,
   fetchPendingMembershipRequests,
+  fetchWorkspaceData,
 } from "@/lib/rescue-client";
 
 beforeEach(() => {
@@ -113,5 +115,35 @@ describe("Workspace hydration tolerates older state", () => {
     expect(Array.isArray(workspace.roles)).toBe(true);
     expect(Array.isArray(workspace.events)).toBe(true);
     expect(Array.isArray(workspace.membershipRequests)).toBe(true);
+  });
+});
+
+describe("Demo onboarding", () => {
+  it("instantly assigns a selected available organization without changing the real approval flow", async () => {
+    await expect(
+      completeDemoOnboarding({
+        fullName: "Judge Reviewer",
+        role: "recipient",
+        organizationId: "d2000000-0000-4000-a000-000000000001",
+      }),
+    ).resolves.toEqual({ ok: true, autoApproved: true });
+
+    const workspace = await fetchWorkspaceData();
+    expect(workspace.profile).toMatchObject({
+      full_name: "Judge Reviewer",
+      organization_id: "d2000000-0000-4000-a000-000000000001",
+      onboarding_complete: true,
+    });
+    expect(workspace.roles.map((row) => row.role)).toEqual(["recipient"]);
+  });
+
+  it("does not allow a demo user to choose a suspended or mismatched organization", async () => {
+    await expect(
+      completeDemoOnboarding({
+        fullName: "Judge Reviewer",
+        role: "recipient",
+        organizationId: "d2000000-0000-4000-a000-000000000007",
+      }),
+    ).rejects.toThrow("Choose an available organization");
   });
 });
