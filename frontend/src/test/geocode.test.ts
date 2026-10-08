@@ -25,7 +25,42 @@ function provider(
 }
 
 describe("Pickup address geocoding", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("uses header-authenticated Google Geocoding v4 without exposing the server key in the URL", async () => {
+    vi.stubEnv("GOOGLE_MAPS_API_KEY", "server-only-key");
+    vi.stubEnv("LOVABLE_API_KEY", "");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              formattedAddress: "400 E Locust St, Des Moines, IA 50309, USA",
+              location: { latitude: 41.588, longitude: -93.611 },
+            },
+          ],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await geocodePickupAddress("400 E Locust St, Des Moines, IA");
+
+    expect(result).toMatchObject({
+      latitude: 41.588,
+      longitude: -93.611,
+      provider: "google_direct",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("https://geocode.googleapis.com/v4/geocode/address/");
+    expect(url).not.toContain("server-only-key");
+    expect(new Headers(init.headers).get("X-Goog-Api-Key")).toBe("server-only-key");
+    expect(init.redirect).toBe("error");
+  });
 
   it("returns the first provider that resolves the address", async () => {
     const result = await geocodePickupAddress("400 E Locust St, Des Moines, IA", [

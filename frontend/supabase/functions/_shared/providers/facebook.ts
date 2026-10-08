@@ -2,7 +2,13 @@
 // Requires a Facebook Page and permissions to read and publish posts.
 
 import { env, HttpError } from "../http.ts";
-import { type AccountIdentity, apiFetch, type Connection, type OAuthProvider, type TokenSet } from "./types.ts";
+import {
+  type AccountIdentity,
+  apiFetch,
+  type Connection,
+  type OAuthProvider,
+  type TokenSet,
+} from "./types.ts";
 
 const graph = () => `https://graph.facebook.com/${env("META_GRAPH_VERSION") ?? "v23.0"}`;
 const SCOPES = [
@@ -13,6 +19,10 @@ const SCOPES = [
   "business_management",
   "public_profile",
 ].join(",");
+
+function bearer(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}` };
+}
 
 export const facebookOAuth: OAuthProvider = {
   platform: "facebook",
@@ -29,25 +39,25 @@ export const facebookOAuth: OAuthProvider = {
     return `https://www.facebook.com/${env("META_GRAPH_VERSION") ?? "v23.0"}/dialog/oauth?${q}`;
   },
   async exchangeCode({ code, redirectUri }): Promise<TokenSet> {
-    const short = await apiFetch(
-      "facebook",
-      `${graph()}/oauth/access_token?${new URLSearchParams({
+    const short = await apiFetch("facebook", `${graph()}/oauth/access_token`, {
+      method: "POST",
+      form: {
         client_id: env("META_APP_ID")!,
         client_secret: env("META_APP_SECRET")!,
         redirect_uri: redirectUri,
         code,
-      })}`,
-    );
+      },
+    });
     // Exchange for long-lived access token
-    const long = await apiFetch(
-      "facebook",
-      `${graph()}/oauth/access_token?${new URLSearchParams({
+    const long = await apiFetch("facebook", `${graph()}/oauth/access_token`, {
+      method: "POST",
+      form: {
         grant_type: "fb_exchange_token",
         client_id: env("META_APP_ID")!,
         client_secret: env("META_APP_SECRET")!,
         fb_exchange_token: short.data.access_token,
-      })}`,
-    );
+      },
+    });
     return {
       accessToken: long.data.access_token,
       expiresIn: long.data.expires_in ?? null,
@@ -57,7 +67,8 @@ export const facebookOAuth: OAuthProvider = {
   async identify(tokens, hint): Promise<AccountIdentity> {
     const { data } = await apiFetch(
       "facebook",
-      `${graph()}/me/accounts?fields=id,name,access_token,link,username&limit=100&access_token=${encodeURIComponent(tokens.accessToken)}`,
+      `${graph()}/me/accounts?fields=id,name,access_token,link,username&limit=100`,
+      { headers: bearer(tokens.accessToken) },
     );
     const pages = data?.data ?? [];
     if (!pages.length) {
@@ -68,8 +79,11 @@ export const facebookOAuth: OAuthProvider = {
     }
     const wanted = hint.orgName.toLowerCase();
     const page =
-      pages.find((p: any) => String(p.name).toLowerCase().includes(wanted) || wanted.includes(String(p.name).toLowerCase())) ??
-      pages[0];
+      pages.find(
+        (p: any) =>
+          String(p.name).toLowerCase().includes(wanted) ||
+          wanted.includes(String(p.name).toLowerCase()),
+      ) ?? pages[0];
     return {
       displayName: page.name,
       handle: page.username ? `@${page.username}` : page.name,
@@ -104,7 +118,7 @@ export async function facebookCreatePost(
   const postId = String(data.id);
   return {
     postId,
-    url: `https://www.facebook.com/${postId.replace('_', '/posts/')}`,
+    url: `https://www.facebook.com/${postId.replace("_", "/posts/")}`,
   };
 }
 
@@ -138,7 +152,8 @@ export async function facebookListPosts(
 ): Promise<Array<{ id: string; message: string; createdTime: string; permalinkUrl: string }>> {
   const { data } = await apiFetch(
     "facebook",
-    `${graph()}/${conn.externalId}/feed?fields=id,message,created_time,permalink_url&limit=${limit}&access_token=${encodeURIComponent(token(conn))}`,
+    `${graph()}/${conn.externalId}/feed?fields=id,message,created_time,permalink_url&limit=${limit}`,
+    { headers: bearer(token(conn)) },
   );
   return (data?.data ?? []).map((p: any) => ({
     id: p.id,
@@ -163,4 +178,3 @@ export async function facebookReplyComment(
   });
   return { id: String(data.id) };
 }
-

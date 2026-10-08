@@ -8,6 +8,10 @@ const migration = readFileSync(
 const seed = readFileSync("supabase/seed-demo.sql", "utf8");
 const creationHandler = readFileSync("src/lib/rescue.functions.ts", "utf8");
 const onboarding = readFileSync("src/routes/_authenticated.onboarding.tsx", "utf8");
+const geocoder = readFileSync("src/lib/geocode.server.ts", "utf8");
+const providerHttp = readFileSync("supabase/functions/_shared/providers/types.ts", "utf8");
+const facebookProvider = readFileSync("supabase/functions/_shared/providers/facebook.ts", "utf8");
+const instagramProvider = readFileSync("supabase/functions/_shared/providers/instagram.ts", "utf8");
 
 describe("security hardening boundaries", () => {
   it("removes the published fixture credential and does not reset existing passwords", () => {
@@ -37,5 +41,19 @@ describe("security hardening boundaries", () => {
     expect(migration).toContain(
       "public.is_org_member(org_id) AND public.has_role(auth.uid(), 'coordinator')",
     );
+  });
+
+  it("keeps server credentials and social tokens out of outbound request URLs", () => {
+    expect(geocoder).toContain("https://geocode.googleapis.com/v4/geocode/address/");
+    expect(geocoder).toContain('"X-Goog-Api-Key"');
+    expect(geocoder).not.toContain("&key=${encodeURIComponent(process.env");
+    expect(facebookProvider).not.toContain("access_token=${encodeURIComponent");
+    expect(instagramProvider).not.toContain("access_token=${encodeURIComponent");
+    expect(facebookProvider).not.toContain("/oauth/access_token?${new URLSearchParams");
+    expect(instagramProvider).not.toContain("/oauth/access_token?${new URLSearchParams");
+    expect(facebookProvider).toContain('method: "POST"');
+    expect(instagramProvider).toContain('method: "POST"');
+    expect(providerHttp).toContain('redirect: rest.redirect ?? "error"');
+    expect(geocoder).toContain('redirect: init?.redirect ?? "error"');
   });
 });
