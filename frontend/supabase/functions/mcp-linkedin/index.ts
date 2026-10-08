@@ -14,6 +14,7 @@ const tools: McpTool[] = [
   {
     name: "create_post",
     description: "Publish a post to LinkedIn company page or profile.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -95,6 +96,7 @@ const tools: McpTool[] = [
   {
     name: "reply_to_comment",
     description: "Reply to an existing comment on a LinkedIn post.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -116,4 +118,3 @@ const tools: McpTool[] = [
 ];
 
 Deno.serve(handleMcpRequest("mcp-linkedin", "1.0.0", tools));
-

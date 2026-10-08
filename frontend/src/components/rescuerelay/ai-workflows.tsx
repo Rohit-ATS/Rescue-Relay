@@ -46,7 +46,7 @@ import {
   generateWithMistralAi,
   auditDraftWithMistral,
   testSocialConnection,
-  saveSocialCredentials,
+  completeSocialOAuthCallback,
   getSocialCredentials,
   disconnectSocialAccount,
 } from '@/lib/social-agents';
@@ -318,13 +318,7 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
 
   // Mistral & Model state
   const [selectedModel, setSelectedModel] = useState<string>('mistral-large-latest');
-  const [mistralApiKey, setMistralApiKey] = useState<string>(() => {
-    try {
-      return localStorage.getItem('rr_mistral_api_key') || '';
-    } catch {
-      return '';
-    }
-  });
+  const [mistralApiKey, setMistralApiKey] = useState<string>('');
   const [showMistralModal, setShowMistralModal] = useState<boolean>(false);
   const [auditResult, setAuditResult] = useState<{
     auditPassed: boolean;
@@ -335,7 +329,6 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
 
   // Real-time connector modal state
   const [oauthDialogPlatform, setOauthDialogPlatform] = useState<string | null>(null);
-  const [customTokenInput, setCustomTokenInput] = useState<string>('');
   const [customPageIdInput, setCustomPageIdInput] = useState<string>('');
   const [customHandleInput, setCustomHandleInput] = useState<string>('');
   const [isTestingConnection, setIsTestingConnection] = useState<boolean>(false);
@@ -369,6 +362,19 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
     return () => {
       unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    void completeSocialOAuthCallback()
+      .then((connection) => {
+        if (connection) toast.success(`${connection.platform.toUpperCase()} account connected securely.`);
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : 'OAuth connection failed.'));
+  }, []);
+
+  useEffect(() => {
+    // Remove a key written by older builds; current-session input stays in React state.
+    localStorage.removeItem('rr_mistral_api_key');
   }, []);
 
   // Sync to localStorage
@@ -651,7 +657,6 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
 
   const handleConnectOAuth = async (platform: string) => {
     const existing = getSocialCredentials(platform);
-    setCustomTokenInput(existing?.accessToken || '');
     setCustomPageIdInput(existing?.pageId || '');
     setCustomHandleInput(existing?.handle || '');
     setTestResult(null);
@@ -662,7 +667,6 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
     setIsTestingConnection(true);
     try {
       const res = await testSocialConnection(platform, {
-        accessToken: customTokenInput,
         pageId: customPageIdInput,
         handle: customHandleInput,
       });
@@ -686,27 +690,9 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
   const handleConfirmOAuthConnection = async (platform: string) => {
     toast.loading(`Connecting ${platform.toUpperCase()} with OAuth & MCP in real time...`, { id: 'oauth-connect' });
     try {
-      const creds = {
-        accessToken: customTokenInput.trim() || `live_token_${platform}_${Date.now()}`,
-        pageId: customPageIdInput.trim() || undefined,
-        handle: customHandleInput.trim() || `@RescueRelay_${platform.toUpperCase()}`,
-      };
-      saveSocialCredentials(platform, creds);
-      setChannels((prev) =>
-        prev.map((c) =>
-          c.platform === platform
-            ? { ...c, connected: true, isLive: true, handle: creds.handle || c.handle }
-            : c,
-        ),
-      );
-      toast.success(`${platform.toUpperCase()} connected with 100% live MCP verification!`, { id: 'oauth-connect' });
-      setOauthDialogPlatform(null);
-    } catch {
-      setChannels((prev) =>
-        prev.map((c) => (c.platform === platform ? { ...c, connected: true, isLive: true } : c)),
-      );
-      toast.success(`${platform.toUpperCase()} connected in real time!`, { id: 'oauth-connect' });
-      setOauthDialogPlatform(null);
+      await startSocialOAuth(platform);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to start OAuth connection.', { id: 'oauth-connect' });
     }
   };
 
@@ -1490,23 +1476,6 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
               </div>
 
               <div>
-                <Label htmlFor="custom-token" className="text-xs font-semibold">
-                  Access Token / API Bearer Token (Optional)
-                </Label>
-                <Input
-                  id="custom-token"
-                  type="password"
-                  value={customTokenInput}
-                  onChange={(e) => setCustomTokenInput(e.target.value)}
-                  placeholder="Paste real token or leave blank for 1-Click verified connector"
-                  className="mt-1.5 text-xs font-mono"
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Leave blank to generate an authentic encrypted sandbox token automatically.
-                </p>
-              </div>
-
-              <div>
                 <Label htmlFor="page-id" className="text-xs font-semibold">
                   Page ID / Business Location ID (Optional)
                 </Label>
@@ -1643,10 +1612,7 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
               </Button>
               <Button
                 onClick={() => {
-                  try {
-                    localStorage.setItem('rr_mistral_api_key', mistralApiKey.trim());
-                    toast.success('Mistral MCP settings saved successfully!');
-                  } catch {}
+                  toast.success('Mistral key will be used only for this browser session.');
                   setShowMistralModal(false);
                 }}
               >

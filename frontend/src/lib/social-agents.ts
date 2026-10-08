@@ -21,22 +21,13 @@ export async function callMcpTool(
   args: Record<string, unknown>,
   options: { orgId?: string; dryRun?: boolean } = {},
 ): Promise<McpCallResult> {
-  const platformFromMcp = serverName.startsWith("mcp-") ? serverName.replace("mcp-", "").replace("-", "_") : "";
-  const savedCreds = platformFromMcp ? getSocialCredentials(platformFromMcp) : null;
-  const enrichedArgs = {
-    ...args,
-    ...(savedCreds?.accessToken ? { accessToken: savedCreds.accessToken } : {}),
-    ...(savedCreds?.pageId ? { pageId: savedCreds.pageId } : {}),
-    ...(savedCreds?.handle ? { handle: savedCreds.handle } : {}),
-  };
-
   const payload = {
     jsonrpc: "2.0",
     id: `req-${Date.now()}`,
     method: "tools/call",
     params: {
       name: toolName,
-      arguments: enrichedArgs,
+      arguments: args,
     },
   };
 
@@ -45,6 +36,7 @@ export async function callMcpTool(
       body: payload,
       headers: {
         ...(options.orgId ? { "x-org-id": options.orgId } : {}),
+        ...(options.dryRun ? { "x-dry-run": "true" } : {}),
       },
     });
 
@@ -139,12 +131,9 @@ export async function sweepSocialInbox() {
 }
 
 export interface SocialConnectionCredentials {
-  accessToken?: string;
-  refreshToken?: string;
   pageId?: string;
   handle?: string;
   displayName?: string;
-  apiKey?: string;
   connectedAt?: string;
   verified?: boolean;
 }
@@ -152,7 +141,23 @@ export interface SocialConnectionCredentials {
 export function getSocialCredentials(platform: string): SocialConnectionCredentials | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(`rr_social_creds_${platform}`);
+    // Remove credentials saved by older browser builds. OAuth tokens now live
+    // only in the encrypted, service-role-only server-side store.
+    const legacyKey = `rr_social_creds_${platform}`;
+    const legacy = localStorage.getItem(legacyKey);
+    if (legacy) {
+      localStorage.removeItem(legacyKey);
+      const parsed = JSON.parse(legacy) as SocialConnectionCredentials;
+      const metadata = {
+        pageId: parsed.pageId,
+        handle: parsed.handle,
+        displayName: parsed.displayName,
+        connectedAt: parsed.connectedAt,
+        verified: parsed.verified,
+      };
+      localStorage.setItem(`rr_social_status_${platform}`, JSON.stringify(metadata));
+    }
+    const raw = localStorage.getItem(`rr_social_status_${platform}`);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -167,7 +172,8 @@ export function saveSocialCredentials(platform: string, creds: SocialConnectionC
       connectedAt: new Date().toISOString(),
       verified: true,
     };
-    localStorage.setItem(`rr_social_creds_${platform}`, JSON.stringify(enriched));
+    localStorage.removeItem(`rr_social_creds_${platform}`);
+    localStorage.setItem(`rr_social_status_${platform}`, JSON.stringify(enriched));
     localStorage.setItem(
       `rr_oauth_${platform}`,
       JSON.stringify({
@@ -185,7 +191,7 @@ export function saveSocialCredentials(platform: string, creds: SocialConnectionC
       timestamp: enriched.connectedAt,
     });
   } catch (err) {
-    console.warn("Failed to persist social credentials:", err);
+    console.warn("Failed to persist social connection status:", err);
   }
 }
 
@@ -193,6 +199,7 @@ export function disconnectSocialAccount(platform: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.removeItem(`rr_social_creds_${platform}`);
+    localStorage.removeItem(`rr_social_status_${platform}`);
     localStorage.removeItem(`rr_oauth_${platform}`);
     broadcastWorkflowUpdate({
       type: "account_disconnected",
@@ -205,7 +212,7 @@ export function disconnectSocialAccount(platform: string): void {
 }
 
 /**
- * Tests live connection to a social channel using real credentials or Mistral MCP verification.
+ * Tests live connection to a social channel without sending browser-held credentials.
  * Guarantees 100% reliable connection verification with detailed diagnostic metrics.
  */
 export async function testSocialConnection(
@@ -225,7 +232,6 @@ export async function testSocialConnection(
     // Ping via Mistral MCP connector tool
     const res = await callMcpTool("mcp-mistral", "mistral_connect_social", {
       platform,
-      accessToken: creds.accessToken,
       handle: creds.handle,
     });
 
@@ -267,7 +273,7 @@ export async function generateWithMistralAi(params: {
   apiKey?: string;
 }): Promise<{ content: string; charCount: number; model: string; isLive: boolean }> {
   const model = params.model || "mistral-large-latest";
-  const apiKey = params.apiKey || (typeof window !== "undefined" ? localStorage.getItem("rr_mistral_api_key") : null) || undefined;
+  const apiKey = params.apiKey || undefined;
 
   const res = await callMcpTool("mcp-mistral", "mistral_generate_post", {
     ...params,
@@ -335,21 +341,19 @@ export async function auditDraftWithMistral(params: {
 
 export async function startSocialOAuth(
   platform: string,
-  options: { openPopup?: boolean; credentials?: SocialConnectionCredentials } = {},
+  options: { openPopup?: boolean } = {},
 ) {
-  if (options.credentials) {
-    saveSocialCredentials(platform, options.credentials);
-    return { type: "connected", platform };
-  }
-
   try {
+    const returnUrl = typeof window !== "undefined" ? new URL(window.location.href) : null;
+    returnUrl?.searchParams.delete("oauth_state");
+    returnUrl?.searchParams.delete("oauth_code");
+    returnUrl?.searchParams.delete("oauth_error");
     const { data, error } = await supabase.functions.invoke("oauth-start", {
-      body: { platform, return_to: typeof window !== "undefined" ? window.location.href : "" },
+      body: { platform, return_to: returnUrl?.toString() || "" },
     });
 
     if (error) {
-      console.warn(`[OAuth Start] Edge function: ${error.message}. Providing direct OAuth connector.`);
-      return handleDirectOAuthConnector(platform);
+      throw new Error(error.message || "Unable to start OAuth");
     }
 
     if (data?.url) {
@@ -364,21 +368,32 @@ export async function startSocialOAuth(
       window.location.href = data.url;
       return { type: "redirect", url: data.url };
     }
-    return handleDirectOAuthConnector(platform);
+    throw new Error("OAuth provider did not return an authorization URL");
   } catch (err: any) {
     console.warn(`[OAuth Start] Exception initiating OAuth:`, err);
-    return handleDirectOAuthConnector(platform);
+    throw err;
   }
 }
 
-function handleDirectOAuthConnector(platform: string) {
-  const updatedAccount: SocialConnectionCredentials = {
-    handle: `@RescueRelay_${platform.toUpperCase()}`,
-    connectedAt: new Date().toISOString(),
-    verified: true,
-  };
-  saveSocialCredentials(platform, updatedAccount);
-  return { type: "connected", platform };
+export async function completeSocialOAuthCallback(): Promise<{ platform: string } | null> {
+  if (typeof window === "undefined") return null;
+  const current = new URL(window.location.href);
+  const state = current.searchParams.get("oauth_state");
+  const providerError = current.searchParams.get("oauth_error");
+  if (!state && !providerError) return null;
+
+  current.searchParams.delete("oauth_state");
+  current.searchParams.delete("oauth_code");
+  current.searchParams.delete("oauth_error");
+  window.history.replaceState({}, "", `${current.pathname}${current.search}${current.hash}`);
+
+  if (providerError) throw new Error(providerError);
+  if (!state) throw new Error("Incomplete OAuth callback");
+  const { data, error } = await supabase.functions.invoke("oauth-complete", { body: { state } });
+  if (error) throw new Error(error.message || "Unable to complete OAuth connection");
+  if (!data?.platform) throw new Error("OAuth completion did not identify a platform");
+  saveSocialCredentials(data.platform, {});
+  return data;
 }
 
 /** Broadcasts workflow updates over Supabase Realtime and window events */

@@ -12,14 +12,43 @@ serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  const platform = url.searchParams.get("platform");
-  const returnTo = url.searchParams.get("return_to") || `${appUrl()}/dashboard?section=workflows`;
+  const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+  const platform =
+    typeof body.platform === "string" ? body.platform : url.searchParams.get("platform");
+  const requestedReturn =
+    typeof body.return_to === "string" ? body.return_to : url.searchParams.get("return_to");
+  const app = new URL(appUrl());
+  const defaultReturn = `${app.pathname.replace(/\/$/, "")}/dashboard?section=workflows`;
+  let returnTo = defaultReturn;
+  if (requestedReturn) {
+    let candidate: URL;
+    try {
+      candidate = new URL(requestedReturn, appUrl());
+    } catch {
+      throw new HttpError(400, "Invalid return_to");
+    }
+    const basePath = app.pathname.replace(/\/$/, "");
+    if (
+      candidate.origin !== app.origin ||
+      (basePath &&
+        candidate.pathname !== basePath &&
+        !candidate.pathname.startsWith(`${basePath}/`))
+    ) {
+      throw new HttpError(400, "return_to must stay within this application");
+    }
+    returnTo = `${candidate.pathname}${candidate.search}${candidate.hash}`;
+  }
 
   if (!isSocialPlatform(platform)) {
-    throw new HttpError(400, "Valid platform required: linkedin, instagram, x, google_business, facebook");
+    throw new HttpError(
+      400,
+      "Valid platform required: linkedin, instagram, x, google_business, facebook",
+    );
   }
 
   const caller = await resolveCaller(req);
+  if (!caller.isCoordinator)
+    throw new HttpError(403, "Coordinator access required to connect social accounts");
   const provider = getProvider(platform);
 
   if (!provider.configured()) {
@@ -46,6 +75,7 @@ serve(async (req) => {
     platform,
     code_verifier: codeVerifier,
     return_to: returnTo,
+    expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
   });
 
   const redirectUri = `${functionsBaseUrl()}/oauth-callback`;
@@ -57,4 +87,3 @@ serve(async (req) => {
 
   return Response.redirect(authUrl, 302);
 });
-

@@ -32,8 +32,11 @@ serve(async (req) => {
     throw new HttpError(404, `Post not found: ${fetchErr?.message}`);
   }
 
-  // 2. Authorize caller against the organization
-  await resolveCaller(req, post.org_id);
+  // 2. Live publishing is a coordinator action, including approved posts.
+  const caller = await resolveCaller(req, post.org_id);
+  if (!caller.isCoordinator) {
+    throw new HttpError(403, "Coordinator access required to publish social posts");
+  }
 
   // 3. Claim the post atomically. Approval is required by default, but an
   // organization can explicitly opt out through its settings.
@@ -46,11 +49,11 @@ serve(async (req) => {
     .select("require_approval")
     .eq("org_id", post.org_id)
     .maybeSingle();
-  if (settingsErr) throw new HttpError(500, `Could not load publishing settings: ${settingsErr.message}`);
+  if (settingsErr)
+    throw new HttpError(500, `Could not load publishing settings: ${settingsErr.message}`);
 
-  const allowedStatuses = settings?.require_approval === false
-    ? ["pending_approval", "approved"]
-    : ["approved"];
+  const allowedStatuses =
+    settings?.require_approval === false ? ["pending_approval", "approved"] : ["approved"];
   const { data: claimedPost, error: claimErr } = await db
     .from("social_posts")
     .update({
@@ -62,7 +65,8 @@ serve(async (req) => {
     .in("status", allowedStatuses)
     .select("id")
     .maybeSingle();
-  if (claimErr) throw new HttpError(500, `Could not claim post for publishing: ${claimErr.message}`);
+  if (claimErr)
+    throw new HttpError(500, `Could not claim post for publishing: ${claimErr.message}`);
   if (!claimedPost) throw new HttpError(409, "Post is not approved for publishing");
 
   const platform: SocialPlatform = post.platform;
@@ -72,7 +76,10 @@ serve(async (req) => {
   // 4. Validate
   const val = validateForPlatform(platform, content, { imageUrl });
   if (!val.ok) {
-    await db.from("social_posts").update({ status: "failed", error: val.errors.join("; ") }).eq("id", postId);
+    await db
+      .from("social_posts")
+      .update({ status: "failed", error: val.errors.join("; ") })
+      .eq("id", postId);
     throw new HttpError(400, `Validation failed: ${val.errors.join("; ")}`);
   }
 

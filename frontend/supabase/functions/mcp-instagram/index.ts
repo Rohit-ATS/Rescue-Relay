@@ -14,6 +14,7 @@ const tools: McpTool[] = [
   {
     name: "publish_image_post",
     description: "Publish an image feed post to Instagram Business account.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -53,6 +54,7 @@ const tools: McpTool[] = [
   {
     name: "publish_story",
     description: "Publish a 24-hour visual Story to Instagram.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -98,6 +100,7 @@ const tools: McpTool[] = [
   {
     name: "reply_to_comment",
     description: "Reply to an Instagram comment.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -137,4 +140,3 @@ const tools: McpTool[] = [
 ];
 
 Deno.serve(handleMcpRequest("mcp-instagram", "1.0.0", tools));
-

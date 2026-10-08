@@ -7,6 +7,8 @@ export interface McpTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** External mutations require the accountable coordinator role. */
+  requiresCoordinator?: boolean;
   handler: (args: any, context: { orgId: string; dryRun: boolean }) => Promise<any>;
 }
 
@@ -30,12 +32,18 @@ export function handleMcpRequest(serverName: string, version: string, tools: Mcp
     try {
       body = await req.json();
     } catch {
-      return json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, 400);
+      return json(
+        { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } },
+        400,
+      );
     }
 
     const { jsonrpc, id, method, params } = body;
     if (jsonrpc !== "2.0") {
-      return json({ jsonrpc: "2.0", id: id ?? null, error: { code: -32600, message: "Invalid Request" } }, 400);
+      return json(
+        { jsonrpc: "2.0", id: id ?? null, error: { code: -32600, message: "Invalid Request" } },
+        400,
+      );
     }
 
     // 1. Initialize
@@ -102,6 +110,20 @@ export function handleMcpRequest(serverName: string, version: string, tools: Mcp
         });
       }
 
+      if (targetTool.requiresCoordinator && !caller.isCoordinator && !dryRun) {
+        return json(
+          {
+            jsonrpc: "2.0",
+            id,
+            error: {
+              code: -32001,
+              message: "Coordinator access required for external account changes",
+            },
+          },
+          403,
+        );
+      }
+
       try {
         const toolOutput = await targetTool.handler(toolArgs, { orgId: caller.orgId, dryRun });
         return json({
@@ -111,7 +133,8 @@ export function handleMcpRequest(serverName: string, version: string, tools: Mcp
             content: [
               {
                 type: "text",
-                text: typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput, null, 2),
+                text:
+                  typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput, null, 2),
               },
             ],
             isError: false,

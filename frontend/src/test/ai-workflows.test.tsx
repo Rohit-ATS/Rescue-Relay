@@ -81,7 +81,6 @@ describe('Mistral MCP & Social Connectors Library', () => {
     const { testSocialConnection } = await import('@/lib/social-agents');
     for (const platform of ['facebook', 'instagram', 'linkedin', 'x', 'google_business']) {
       const res = await testSocialConnection(platform, {
-        accessToken: 'real_test_token_123',
         handle: `@test_${platform}`,
       });
       expect(res.ok).toBe(true);
@@ -121,23 +120,20 @@ describe('Mistral MCP & Social Connectors Library', () => {
     expect(res.complianceScore).toBeGreaterThanOrEqual(90);
   });
 
-  it('manages social credentials securely via saveSocialCredentials and disconnectSocialAccount', async () => {
+  it('keeps social connection metadata without persisting access tokens', async () => {
     const { saveSocialCredentials, getSocialCredentials, disconnectSocialAccount } = await import('@/lib/social-agents');
     saveSocialCredentials('facebook', {
-      accessToken: 'fb_secret_token_abc',
       pageId: '1029384756',
       handle: '@HopeCommunityPantry',
     });
 
     const saved = getSocialCredentials('facebook');
-    expect(saved?.accessToken).toBe('fb_secret_token_abc');
     expect(saved?.pageId).toBe('1029384756');
     expect(saved?.verified).toBe(true);
+    expect(localStorage.getItem('rr_social_creds_facebook')).toBeNull();
 
     disconnectSocialAccount('facebook');
     const cleared = getSocialCredentials('facebook');
     expect(cleared).toBeNull();
   });
 });
-
-

@@ -16,6 +16,7 @@ const tools: McpTool[] = [
   {
     name: "create_local_post",
     description: "Publish a Local Post directly to your Google Maps pin / Google Business Profile (STANDARD, EVENT, or OFFER).",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -85,6 +86,7 @@ const tools: McpTool[] = [
   {
     name: "reply_to_review",
     description: "Post an owner reply to a Google Maps review.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -105,6 +107,7 @@ const tools: McpTool[] = [
   {
     name: "update_hours",
     description: "Update regular operating/distribution hours shown on Google Maps.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -136,4 +139,3 @@ const tools: McpTool[] = [
 ];
 
 Deno.serve(handleMcpRequest("mcp-google-business", "1.0.0", tools));
-

@@ -9,6 +9,7 @@ const tools: McpTool[] = [
   {
     name: "create_post",
     description: "Post a single tweet / post to X (up to 280 characters).",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -45,6 +46,7 @@ const tools: McpTool[] = [
   {
     name: "create_thread",
     description: "Publish a connected sequence (thread) of tweets.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -100,6 +102,7 @@ const tools: McpTool[] = [
   {
     name: "reply",
     description: "Post a reply to an existing tweet.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -123,4 +126,3 @@ const tools: McpTool[] = [
 ];
 
 Deno.serve(handleMcpRequest("mcp-x", "1.0.0", tools));
-

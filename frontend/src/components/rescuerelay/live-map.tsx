@@ -243,6 +243,7 @@ export function LiveMap({
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [sessionApiKey, setSessionApiKey] = useState("");
   const [configOpen, setConfigOpen] = useState(false);
 
   const pointsKey = JSON.stringify(points.map((p) => [p.id, p.lat, p.lng, p.label, p.kind]));
@@ -258,10 +259,8 @@ export function LiveMap({
   const pickupCount = points.filter((p) => p.kind === "donor").length;
   const dropoffCount = points.length - pickupCount;
 
-  const customKey =
-    typeof window !== "undefined" ? localStorage.getItem("rr_google_maps_key") : null;
   const key =
-    customKey ||
+    sessionApiKey ||
     import.meta.env["VITE_GOOGLE_MAPS_API_KEY"] ||
     import.meta.env["VITE_GOOGLE_MAPS_BROWSER_KEY"] ||
     import.meta.env["VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY"];
@@ -403,16 +402,20 @@ export function LiveMap({
       renderers.forEach((renderer) => renderer.setMap(null));
       infoWindows.forEach((w) => w.close());
     };
-  }, [key, channel, pointsKey, retry, routeKey, customKey]);
+  }, [key, channel, pointsKey, retry, routeKey]);
+
+  useEffect(() => {
+    localStorage.removeItem("rr_google_maps_key");
+  }, []);
 
   function handleSaveKey(e: React.FormEvent) {
     e.preventDefault();
     if (apiKeyInput.trim()) {
-      localStorage.setItem("rr_google_maps_key", apiKeyInput.trim());
-      toast.success("Google Maps API key saved! Reloading map...");
+      setSessionApiKey(apiKeyInput.trim());
+      toast.success("Google Maps API key set for this browser session. Reloading map...");
     } else {
-      localStorage.removeItem("rr_google_maps_key");
-      toast.info("Cleared custom API key. Using default config.");
+      setSessionApiKey("");
+      toast.info("Cleared session key. Using default config.");
     }
     setConfigOpen(false);
     mapLoader = undefined;

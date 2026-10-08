@@ -4,57 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 /** Shown on the demo profile so a judge can tell sessions apart. */
 const GUEST_NAME = "Hackathon Guest";
 
-/** Set once per tab, so a reload does not re-run the role grant needlessly. */
-let demoAccessClaimed = false;
-
-/**
- * Grants this session every operating role, so one visitor can post surplus,
- * accept it, drive it and verify partners without an approval step.
- *
- * Failure is deliberately not fatal: the workspace still loads, just with
- * whatever roles the session already had.
- */
-async function claimDemoAccess() {
-  if (demoAccessClaimed) return;
-  demoAccessClaimed = true;
-  try {
-    const rpc = supabase.rpc as unknown as (
-      fn: string,
-      args: Record<string, unknown>,
-    ) => Promise<{ error: { message: string } | null }>;
-    const { error } = await rpc("claim_demo_access", { _full_name: GUEST_NAME });
-    if (error) {
-      demoAccessClaimed = false;
-      console.warn("Demo access could not be claimed:", error.message);
-    }
-  } catch (err) {
-    demoAccessClaimed = false;
-    console.warn("Demo access bypassed:", err);
-  }
-}
-
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
     try {
       const { data: existing } = await supabase.auth.getSession();
-      if (existing?.session?.user) {
-        await claimDemoAccess();
-        return { user: existing.session.user, demoOnly: false };
+      const user = existing?.session?.user;
+      if (user && user.app_metadata?.provider !== "anonymous") {
+        return { user, demoOnly: false };
       }
 
-      const { data, error } = await supabase.auth.signInAnonymously();
-      if (!error && data?.user) {
-        await claimDemoAccess();
-        return { user: data.user, demoOnly: false };
-      }
-
-      if (error) {
-        console.warn(
-          "Anonymous sign-in unavailable, loading demo evaluator session for review:",
-          error.message,
-        );
-      }
     } catch (err) {
       console.warn("Auth initialization fallback to demo session:", err);
     }

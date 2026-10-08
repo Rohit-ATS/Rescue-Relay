@@ -14,6 +14,7 @@ const tools: McpTool[] = [
   {
     name: "create_page_post",
     description: "Publish a text post or link post directly to the connected Facebook Page.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -53,6 +54,7 @@ const tools: McpTool[] = [
   {
     name: "create_photo_post",
     description: "Publish a photo with a caption to the connected Facebook Page.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -119,6 +121,7 @@ const tools: McpTool[] = [
   {
     name: "reply_to_comment",
     description: "Post a reply to a user comment on a Facebook Page post.",
+    requiresCoordinator: true,
     inputSchema: {
       type: "object",
       properties: {
@@ -163,4 +166,3 @@ const tools: McpTool[] = [
 ];
 
 Deno.serve(handleMcpRequest("mcp-facebook", "1.0.0", tools));
-
