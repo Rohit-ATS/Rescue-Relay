@@ -11,5 +11,6 @@ describe('Rescue input validation', () => {
  it('restricts onboarding to operational roles',()=>{
   expect(onboardingSchema.safeParse({fullName:'Jordan Lee',role:'driver'}).success).toBe(true);
   expect(onboardingSchema.safeParse({fullName:'Jordan Lee',role:'admin'}).success).toBe(false);
+  expect(onboardingSchema.safeParse({fullName:'Jordan Lee',role:'coordinator'}).success).toBe(false);
  });
 });

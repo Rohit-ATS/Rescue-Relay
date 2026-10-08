@@ -16,11 +16,11 @@
 BEGIN;
 
 -- ===========================================================================
--- 1. Demo accounts. All four share the password:  RescueRelay!2026
+-- 1. Demo fixture identities.
 -- ===========================================================================
--- If you would rather create these by hand, use Authentication -> Users -> Add
--- user with "Auto Confirm User" ticked, then re-run this file; it will find them
--- by email and skip creating them.
+-- These identities make the seeded foreign keys realistic, but are not shared
+-- sign-in accounts. New rows receive an undisclosed random password and existing
+-- rows are left alone, so re-running the fixture never resets an account password.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -36,20 +36,14 @@ BEGIN
       ('d0000000-0000-4000-a000-000000000004'::uuid, 'coordinator@rescuerelay-qa.org')
     ) AS t(id, email)
   LOOP
-    IF EXISTS (SELECT 1 FROM auth.users WHERE email = demo.email) THEN
-      -- Already present: just make sure it can sign in.
-      UPDATE auth.users
-         SET email_confirmed_at = COALESCE(email_confirmed_at, now()),
-             encrypted_password = crypt('RescueRelay!2026', gen_salt('bf'))
-       WHERE email = demo.email;
-    ELSE
+    IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = demo.email) THEN
       INSERT INTO auth.users (
         instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
         raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
         confirmation_token, recovery_token, email_change_token_new, email_change
       ) VALUES (
         '00000000-0000-0000-0000-000000000000', demo.id, 'authenticated', 'authenticated',
-        demo.email, crypt('RescueRelay!2026', gen_salt('bf')), now(),
+        demo.email, crypt(encode(gen_random_bytes(32), 'hex'), gen_salt('bf')), now(),
         '{"provider":"email","providers":["email"]}'::jsonb,
         jsonb_build_object('email', demo.email, 'email_verified', true),
         now(), now(), '', '', '', ''

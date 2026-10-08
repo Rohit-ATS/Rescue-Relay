@@ -13,7 +13,7 @@ export const donationSchema = z.object({
 
 export const onboardingSchema = z.object({
   fullName: z.string().trim().min(2).max(100),
-  role: z.enum(["donor", "recipient", "driver", "coordinator"]),
+  role: z.enum(["donor", "recipient", "driver"]),
   organizationId: z.string().uuid().optional(),
 }).superRefine((input, ctx) => {
   const needsOrganization = input.role === "donor" || input.role === "recipient";

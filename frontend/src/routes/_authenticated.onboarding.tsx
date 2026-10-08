@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, Car, HeartHandshake, ShieldCheck } from "lucide-react";
+import { Building2, Car, HeartHandshake } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { completeOnboarding, getWorkspace } from "@/lib/rescue.functions";
 import { WORKSPACE_QUERY_KEY } from "@/lib/live-sync";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
-  head: () => ({ meta: [{ title: "Choose your role — RescueRelay" }, { name: "description", content: "Set up your RescueRelay donor, nonprofit, driver, or coordinator workspace." }] }),
+  head: () => ({ meta: [{ title: "Choose your role — RescueRelay" }, { name: "description", content: "Set up your RescueRelay donor, nonprofit, or driver workspace." }] }),
   component: Onboarding,
 });
 
@@ -20,7 +20,6 @@ const roles = [
   ["donor", "Food donor", "Post safe surplus in under a minute", Building2],
   ["recipient", "Nonprofit recipient", "Accept food your organization can use", HeartHandshake],
   ["driver", "Volunteer driver", "Pick up and document deliveries", Car],
-  ["coordinator", "Coordinator", "Verify partners and manage exceptions", ShieldCheck],
 ] as const;
 
 function Onboarding() {

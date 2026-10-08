@@ -107,7 +107,11 @@ export const createDonation = createServerFn({ method: "POST" })
       if (error instanceof AddressNotFoundError) throw error;
       throw error instanceof Error ? error : new Error('Address lookup failed. Please try again later.');
     }
-    const { data: donation, error } = await context.supabase.from("donations").insert({
+    // The caller identity above has already been authenticated, authorized, and used
+    // to derive all protected fields. Persist through the server-only admin client so
+    // browser-accessible database grants can stay read-only for workflow tables.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: donation, error } = await supabaseAdmin.from("donations").insert({
       donor_user_id: context.userId,
       donor_org_id: profile?.organization_id ?? null,
       title: data.title,
@@ -124,7 +128,7 @@ export const createDonation = createServerFn({ method: "POST" })
     }).select("id").single();
     if (error || !donation) throw new Error(error?.message ?? "Donation could not be created.");
 
-    const { data: recipients } = await context.supabase.from("organizations").select("*").eq("type", "recipient").eq("verification_status", "verified");
+    const { data: recipients } = await supabaseAdmin.from("organizations").select("*").eq("type", "recipient").eq("verification_status", "verified");
     const createdAt = Date.now();
     const deadline = new Date(data.pickupDeadline).getTime();
     const candidates = (recipients ?? []).map((recipient) => {
@@ -133,10 +137,11 @@ export const createDonation = createServerFn({ method: "POST" })
       return { donation_id: donation.id, recipient_org_id: recipient.id, score: result.score, explanation: result.explanation, status: "proposed" as const, eligible: result.eligible };
     }).filter((candidate) => candidate.eligible).map(({ eligible: _eligible, ...candidate }) => candidate);
     if (candidates.length) {
-      const { error: matchError } = await context.supabase.from("matches").insert(candidates);
+      const { error: matchError } = await supabaseAdmin.from("matches").insert(candidates);
       if (matchError) throw new Error(matchError.message);
     }
-    await context.supabase.from("rescue_events").insert({ donation_id: donation.id, actor_user_id: context.userId, event_type: "donation_posted", detail: `${data.pounds} lb ${data.category} posted · pickup located via ${location.provider}` });
+    const { error: eventError } = await supabaseAdmin.from("rescue_events").insert({ donation_id: donation.id, actor_user_id: context.userId, event_type: "donation_posted", detail: `${data.pounds} lb ${data.category} posted · pickup located via ${location.provider}` });
+    if (eventError) throw new Error(eventError.message);
     return { id: donation.id, matches: candidates.length };
   });
 

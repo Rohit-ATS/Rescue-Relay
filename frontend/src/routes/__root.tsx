@@ -224,7 +224,7 @@ function RootComponent() {
         // Instant Demo Guest Evaluator
         const demoUser = {
           id: "d0000000-0000-4000-a000-000000000004",
-          email: "coordinator@rescuerelay-qa.org",
+          email: "demo-evaluator@local.invalid",
           app_metadata: {},
           user_metadata: { full_name: "Casey Ahmed (Judge Evaluator)" },
           aud: "authenticated",
@@ -304,4 +304,3 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
-

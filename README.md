@@ -172,14 +172,19 @@ rather than distance.
 to click through. Paste it into the Supabase SQL Editor and run it — it runs as `postgres`, so
 no API keys are needed, and it is safe to re-run.
 
-It creates four accounts, all with the password `RescueRelay!2026`:
+It creates non-interactive fixture identities for donor, recipient, driver, and coordinator
+records. They deliberately have no shared sign-in password. The deployed hackathon walkthrough
+uses the browser-only demo workspace, while real accounts must be created through the normal
+authentication flow.
 
-| Account | Role | Shows |
-| --- | --- | --- |
-| `donor@rescuerelay-qa.org` | Donor | Postings across every stage, plus delivered and expired in Recent |
-| `recipient@rescuerelay-qa.org` | Recipient | An unanswered offer under "Waiting on you", plus a declined and an expired one in Recent |
-| `driver@rescuerelay-qa.org` | Driver | One route to collect, one to drop off, two completed in Recent |
-| `coordinator@rescuerelay-qa.org` | Coordinator | Everything, a stalled rescue needing an exception, and verify/suspend on the directory |
+### Security rollout
+
+Apply `frontend/drizzle/migrations/0017_close_workflow_write_boundaries.sql` to every Supabase
+environment before deployment. It invalidates the old fixture credentials, removes direct browser
+writes to workflow tables, and tightens coordinator controls. It preserves existing coordinator
+rows to avoid disabling legitimate administrators, so an environment owner must review
+`public.user_roles` after applying it and remove any coordinator that was not explicitly
+provisioned by the team.
 
 It also seeds nine organizations (five verified food banks, one pending, one suspended, two
 donors) and ten rescues covering open, matched, accepted, driver-assigned, picked-up,
