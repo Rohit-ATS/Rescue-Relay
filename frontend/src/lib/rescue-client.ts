@@ -22,8 +22,8 @@ import {
 
 import { publishWorkspace, startDemoSync } from "@/lib/demo-broadcast";
 
-// Versioned so new fictional demo locations appear for returning visitors too.
-const STORAGE_KEY = "rescuerelay-demo-workspace-v3";
+// Versioned so new demo locations and their card photos appear for returning visitors too.
+const STORAGE_KEY = "rescuerelay-demo-workspace-v4";
 const REALTIME_CHANNEL = "rescue-relay-live-stream";
 
 /** A workspace with every collection present, used as the base for anything we load. */

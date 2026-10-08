@@ -54,7 +54,7 @@ describe("Membership requests on a static host", () => {
 });
 
 describe("Workspace hydration tolerates older state", () => {
-  const KEY = "rescuerelay-demo-workspace-v3";
+  const KEY = "rescuerelay-demo-workspace-v4";
 
   it("fills in collections a workspace saved by an older build is missing", async () => {
     // Exactly what broke the deployed dashboard: a v1 workspace stored before

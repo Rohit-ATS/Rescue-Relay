@@ -66,6 +66,8 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     capacity_lbs: 600,
     accepted_categories: ["produce", "bakery", "dairy", "prepared meals"],
     households_served: 540,
+    // Representative community-pantry photo for this illustrative demo partner.
+    photo_url: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=80",
     created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
   },
   {
@@ -80,6 +82,7 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     capacity_lbs: 250,
     accepted_categories: ["prepared meals", "bakery"],
     households_served: 180,
+    photo_url: "https://images.unsplash.com/photo-1615897570582-285ffe259530?auto=format&fit=crop&w=1200&q=80",
     created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
   },
   {
@@ -94,6 +97,7 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     capacity_lbs: 150,
     accepted_categories: ["produce", "bakery"],
     households_served: 95,
+    photo_url: "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=1200&q=80",
     created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
   },
   {
@@ -108,6 +112,7 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     capacity_lbs: 380,
     accepted_categories: ["produce", "dairy", "prepared meals"],
     households_served: 265,
+    photo_url: "https://images.unsplash.com/photo-1509099836639-18ba1795216d?auto=format&fit=crop&w=1200&q=80",
     created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
   },
   {
@@ -122,6 +127,7 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     capacity_lbs: 120,
     accepted_categories: ["produce", "dairy"],
     households_served: 70,
+    photo_url: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=80",
     created_at: new Date(Date.now() - 86400000).toISOString(),
   },
   {
@@ -136,6 +142,7 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     capacity_lbs: 300,
     accepted_categories: ["produce", "bakery"],
     households_served: 210,
+    photo_url: "https://images.unsplash.com/photo-1615897570582-285ffe259530?auto=format&fit=crop&w=1200&q=80",
     created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
   },
   // These are illustrative demo partners placed at real, public metro locations.
@@ -152,6 +159,7 @@ export const INITIAL_ORGANIZATIONS: Organization[] = [
     capacity_lbs: 110,
     accepted_categories: ["prepared meals", "produce", "bakery"],
     households_served: 80,
+    photo_url: "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=1200&q=80",
     created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
   },
   {
