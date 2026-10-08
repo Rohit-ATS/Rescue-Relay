@@ -62,6 +62,8 @@ export type MapPoint = {
 export type MapRoute = {
   origin: { lat: number; lng: number };
   destination: { lat: number; lng: number };
+  /** Stops between origin and destination, such as the pickup before drop-off. */
+  waypoints?: Array<{ lat: number; lng: number }>;
 };
 
 /** Brand tokens, resolved to hex for Google Maps markers and overlays. */
@@ -345,6 +347,7 @@ export function LiveMap({
             .route({
               origin: routeData.origin,
               destination: routeData.destination,
+              waypoints: routeData.waypoints?.map((location) => ({ location, stopover: true })),
               travelMode: maps.TravelMode.DRIVING,
               provideRouteAlternatives: true,
             })

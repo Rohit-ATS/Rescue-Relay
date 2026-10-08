@@ -222,7 +222,14 @@ export function OpportunityCard({
             Details <ArrowRight />
           </Button>
           {canDrive && o.claimable && o.matchId && (
-            <Button size="sm" disabled={busy} onClick={() => onClaim(o.matchId as string)}>
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                if (!routeActive) onToggleRoute();
+                onClaim(o.matchId as string);
+              }}
+            >
               <Truck /> Volunteer
             </Button>
           )}
