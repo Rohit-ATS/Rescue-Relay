@@ -168,7 +168,8 @@ export async function fetchWorkspaceData(): Promise<WorkspaceData> {
   // A screen that never writes still needs to receive what the others post.
   ensureDemoSync();
   try {
-    const [donationsRes, orgsRes, matchesRes, deliveriesRes, eventsRes] = await Promise.all([
+    const [sessionRes, donationsRes, orgsRes, matchesRes, deliveriesRes, eventsRes] = await Promise.all([
+      supabase.auth.getSession(),
       supabase.from("donations").select("*").order("pickup_deadline"),
       supabase.from("organizations").select("*").order("name"),
       supabase.from("matches").select("*").order("score", { ascending: false }),
@@ -190,7 +191,8 @@ export async function fetchWorkspaceData(): Promise<WorkspaceData> {
         deliveries: (deliveriesRes.data ?? []) as Delivery[],
         events: (eventsRes.data ?? []) as RescueEvent[],
         membershipRequests: getStoredWorkspace().membershipRequests,
-        userId: DEMO_USER_ID,
+        // Use the real signed-in user for owner-only controls such as deleting a post.
+        userId: sessionRes.data.session?.user.id ?? DEMO_USER_ID,
       };
     }
   } catch (err) {

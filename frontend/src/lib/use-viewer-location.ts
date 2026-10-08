@@ -10,6 +10,11 @@ export type LocationState = {
   request: () => void;
 };
 
+type LocationOptions = {
+  /** Request permission after loading when no recent location is stored. */
+  requestOnLoad?: boolean;
+};
+
 const STORAGE_KEY = "rescuerelay-viewer-location";
 /** A volunteer's own position only has to be roughly right to rank nearby runs. */
 const MAX_AGE_MS = 5 * 60 * 1000;
@@ -21,25 +26,10 @@ const TIMEOUT_MS = 10000;
  * Nothing depends on it: without a position the lists still render, just unsorted
  * by distance. The last position is cached so a reload does not re-prompt.
  */
-export function useViewerLocation(): LocationState {
+export function useViewerLocation({ requestOnLoad = false }: LocationOptions = {}): LocationState {
   const [coords, setCoords] = useState<Coords | null>(null);
   const [status, setStatus] = useState<LocationState["status"]>("idle");
   const [error, setError] = useState("");
-
-  // Restore the cached position first so the first paint can already rank by distance.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as { latitude: number; longitude: number; savedAt: number };
-      if (Number.isFinite(saved.latitude) && Number.isFinite(saved.longitude)) {
-        setCoords({ latitude: saved.latitude, longitude: saved.longitude });
-        setStatus("granted");
-      }
-    } catch {
-      // Private browsing or blocked storage; the viewer can still share a position.
-    }
-  }, []);
 
   const request = useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -73,6 +63,26 @@ export function useViewerLocation(): LocationState {
       { enableHighAccuracy: false, maximumAge: MAX_AGE_MS, timeout: TIMEOUT_MS },
     );
   }, []);
+
+  // Restore the cached position first. When there is none, the dashboard can opt in
+  // to asking immediately, so route estimates start from the visitor's location.
+  useEffect(() => {
+    let restored = false;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { latitude: number; longitude: number; savedAt: number };
+        if (Number.isFinite(saved.latitude) && Number.isFinite(saved.longitude)) {
+          restored = true;
+          setCoords({ latitude: saved.latitude, longitude: saved.longitude });
+          setStatus("granted");
+        }
+      }
+    } catch {
+      // Private browsing or blocked storage; the viewer can still share a position.
+    }
+    if (requestOnLoad && !restored) request();
+  }, [request, requestOnLoad]);
 
   return { coords, status, error, request };
 }

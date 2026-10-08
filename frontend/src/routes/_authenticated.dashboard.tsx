@@ -47,7 +47,7 @@ function Dashboard(){
  // land in a per-browser store that no other screen can read.
  const {demoOnly}=Route.useRouteContext() as {demoOnly?:boolean};
  const {data,error,isPending,isFetching,refetch}=useQuery({queryKey:WORKSPACE_QUERY_KEY,queryFn:()=>fetchWorkspaceData(),refetchInterval:connection==='Live'?POLL_LIVE_MS:POLL_DEGRADED_MS,refetchOnWindowFocus:true,refetchOnReconnect:true});
- const location=useViewerLocation();
+ const location=useViewerLocation({requestOnLoad:true});
  const [feed,setFeed]=useState<RescueActivity['phase']>('current');
  const [routeRun,setRouteRun]=useState<Opportunity|null>(null);const [routeSummary,setRouteSummary]=useState<{distance:string;duration:string;followsRoads?:boolean}|null>(null); const [detailId,setDetailId]=useState(''); const [tab,setTab]=useState(search?.tab||'overview');const [selected,setSelected]=useState('');const [busy,setBusy]=useState(false);const [clock,setClock]=useState(Date.now());
  useEffect(()=>{if(search?.tab)setTab(search.tab);},[search?.tab]);
