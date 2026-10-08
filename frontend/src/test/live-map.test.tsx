@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -71,12 +72,14 @@ const BANK: MapPoint = {
 
 beforeEach(() => {
   resetGoogleMapsStateForTesting();
+  localStorage.removeItem("rr_google_maps_key");
   vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "test-key");
   installFakeMapsApi();
 });
 
 afterEach(() => {
   resetGoogleMapsStateForTesting();
+  localStorage.removeItem("rr_google_maps_key");
   vi.unstubAllEnvs();
   delete (window as unknown as { google?: unknown }).google;
 });
@@ -140,6 +143,20 @@ describe("LiveMap", () => {
 
     expect(await screen.findByText(/Google Maps browser API key is required/)).toBeInTheDocument();
     expect(container.querySelector("iframe")).not.toBeInTheDocument();
+  });
+
+  it("keeps a user-provided browser key after the map is refreshed", async () => {
+    const user = userEvent.setup();
+    vi.stubEnv("VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY", "");
+    render(<LiveMap points={[{ ...PICKUP }]} />);
+
+    await user.click(await screen.findByRole("button", { name: /set api key/i }));
+    await user.type(screen.getByRole("textbox", { name: "Google Maps API Key" }), "AIzaSavedBrowserKey");
+    await user.click(screen.getByRole("button", { name: /save key/i }));
+
+    await waitFor(() => {
+      expect(localStorage.getItem("rr_google_maps_key")).toBe("AIzaSavedBrowserKey");
+    });
   });
 });
 

@@ -189,6 +189,16 @@ export function getGoogleMapsDirectionsUrl(points: MapPoint[], route?: MapRoute)
 
 let mapLoader: Promise<void> | undefined;
 let googleMapsAuthFailed = false;
+const BROWSER_KEY_STORAGE = "rr_google_maps_key";
+
+function readBrowserMapsKey() {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(BROWSER_KEY_STORAGE)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
 
 export function resetGoogleMapsStateForTesting() {
   mapLoader = undefined;
@@ -245,7 +255,10 @@ export function LiveMap({
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [sessionApiKey, setSessionApiKey] = useState("");
+  // Maps browser keys are meant to be public and restricted by HTTP referrer.
+  // Persisting this local override lets a self-hosted Pages deployment recover
+  // without embedding the key in source control or asking on every refresh.
+  const [sessionApiKey, setSessionApiKey] = useState(readBrowserMapsKey);
   const [configOpen, setConfigOpen] = useState(false);
 
   const pointsKey = JSON.stringify(points.map((p) => [p.id, p.lat, p.lng, p.label, p.kind]));
@@ -407,18 +420,23 @@ export function LiveMap({
     };
   }, [key, channel, pointsKey, retry, routeKey]);
 
-  useEffect(() => {
-    localStorage.removeItem("rr_google_maps_key");
-  }, []);
-
   function handleSaveKey(e: React.FormEvent) {
     e.preventDefault();
-    if (apiKeyInput.trim()) {
-      setSessionApiKey(apiKeyInput.trim());
-      toast.success("Google Maps API key set for this browser session. Reloading map...");
+    const nextKey = apiKeyInput.trim();
+    if (nextKey) {
+      setSessionApiKey(nextKey);
+      try {
+        localStorage.setItem(BROWSER_KEY_STORAGE, nextKey);
+      } catch {
+        // The key still works in memory when private browsing blocks storage.
+      }
+      toast.success("Google Maps API key saved on this device. Reloading map...");
     } else {
       setSessionApiKey("");
-      toast.info("Cleared session key. Using default config.");
+      try {
+        localStorage.removeItem(BROWSER_KEY_STORAGE);
+      } catch {}
+      toast.info("Cleared saved key. Using default configuration.");
     }
     setConfigOpen(false);
     mapLoader = undefined;
@@ -468,7 +486,8 @@ export function LiveMap({
                     <DialogHeader>
                       <DialogTitle>Configure Google Maps API Key</DialogTitle>
                       <DialogDescription>
-                        Paste an authorized Google Maps Platform JavaScript API Key.
+                        Paste an authorized Google Maps Platform JavaScript API Key. It stays on
+                        this device and should be restricted to this site&apos;s domain in Google Cloud.
                       </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleSaveKey} className="space-y-4 pt-2">
