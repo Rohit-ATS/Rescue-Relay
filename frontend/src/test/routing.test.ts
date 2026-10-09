@@ -91,3 +91,80 @@ describe("Driving route", () => {
     expect(route.followsRoads).toBe(false);
   });
 });
+
+describe("Turn-by-turn directions", () => {
+  const WITH_STEPS = {
+    code: "Ok",
+    routes: [
+      {
+        distance: 7532,
+        duration: 530,
+        geometry: {
+          coordinates: [
+            [-93.630764, 41.584605],
+            [-93.6175, 41.526349],
+          ],
+        },
+        legs: [
+          {
+            steps: [
+              { distance: 34.4, name: "", maneuver: { type: "depart" } },
+              { distance: 531.7, name: "2nd Avenue", maneuver: { type: "turn", modifier: "left" } },
+            ],
+          },
+          {
+            steps: [
+              {
+                distance: 4087.8,
+                name: "John MacVicar Freeway",
+                maneuver: { type: "merge", modifier: "slight left" },
+              },
+              { distance: 0, name: "", maneuver: { type: "arrive" } },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  it("phrases each manoeuvre and keeps every leg in one list", async () => {
+    const route = await fetchDrivingRoute(PICKUP, BANK, osrmResponse(WITH_STEPS), {
+      waypoints: [{ latitude: 41.56, longitude: -93.62 }],
+    });
+
+    expect(route.steps.map((s) => s.instruction)).toEqual([
+      "Start the drive",
+      "Turn left onto 2nd Avenue",
+      "Merge slightly left onto John MacVicar Freeway",
+      "Arrive at the stop",
+    ]);
+    expect(route.steps[1]?.distanceMiles).toBeCloseTo(531.7 / 1609.344, 4);
+  });
+
+  it("routes through the waypoints it was given, in order", async () => {
+    const spy = osrmResponse(WITH_STEPS);
+    await fetchDrivingRoute(PICKUP, BANK, spy, {
+      waypoints: [{ latitude: 41.56, longitude: -93.62 }],
+    });
+
+    const url = String((spy as unknown as { mock: { calls: string[][] } }).mock.calls[0]?.[0]);
+    expect(url).toContain("-93.6308,41.5847;-93.62,41.56;-93.6175,41.5264");
+    // Without this OSRM returns geometry but no manoeuvres.
+    expect(url).toContain("steps=true");
+  });
+
+  // A driver would rather see "no directions" than a turn list for a line that
+  // ignores roads entirely.
+  it("offers no directions for the straight-line fallback, and totals every stop", async () => {
+    const route = await fetchDrivingRoute(PICKUP, BANK, osrmResponse({}, false), {
+      waypoints: [{ latitude: 41.9, longitude: -93.9 }],
+    });
+
+    expect(route.followsRoads).toBe(false);
+    expect(route.steps).toEqual([]);
+    expect(route.path).toHaveLength(3);
+    // The detour through the waypoint is longer than the direct line it replaced.
+    const direct = await fetchDrivingRoute(PICKUP, BANK, osrmResponse({}, false));
+    expect(route.distanceMiles).toBeGreaterThan(direct.distanceMiles);
+  });
+});

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Key, MapPin, RefreshCw } from "lucide-react";
+import { CornerUpRight, ExternalLink, Key, MapPin, RefreshCw } from "lucide-react";
+import { formatMiles, formatMinutes } from "@/lib/geo";
+import { fetchDrivingRoute, type RouteStep } from "@/lib/routing";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +16,16 @@ import {
 import { toast } from "sonner";
 
 type MapInstance = { fitBounds: (bounds: unknown, padding?: number) => void };
-type DirectionsLeg = { distance?: { text: string; value?: number }; duration?: { text: string } };
+type DirectionsStep = {
+  /** Google ships the prose, as HTML with road names marked up. */
+  instructions?: string;
+  distance?: { text?: string; value?: number };
+};
+type DirectionsLeg = {
+  distance?: { text: string; value?: number };
+  duration?: { text: string; value?: number };
+  steps?: DirectionsStep[];
+};
 type DirectionsResult = { routes?: Array<{ legs?: DirectionsLeg[] }> };
 
 declare global {
@@ -44,6 +55,9 @@ declare global {
           setDirections: (result: DirectionsResult) => void;
           setRouteIndex: (routeIndex: number) => void;
         };
+        Polyline: new (options: Record<string, unknown>) => {
+          setMap: (map: unknown) => void;
+        };
         TravelMode: { DRIVING: string };
       };
     };
@@ -65,6 +79,87 @@ export type MapRoute = {
   /** Stops between origin and destination, such as the pickup before drop-off. */
   waypoints?: Array<{ lat: number; lng: number }>;
 };
+
+/** What the map learned about the drawn route, for the panel beside it. */
+export type RouteSummary = {
+  distance: string;
+  duration: string;
+  /** False when Google Directions was unavailable and this is the keyless estimate. */
+  followsRoads: boolean;
+  /** Turn-by-turn manoeuvres. Empty when only a straight-line estimate was possible. */
+  steps: RouteStep[];
+};
+
+/** Google ships instructions as HTML; the panel renders text, so the markup goes. */
+function toPlainInstruction(html: string): string {
+  return html
+    .replace(/<\/?(?:div|br)[^>]*>/gi, " · ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s*·\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const METRES_PER_MILE = 1609.344;
+
+/** Total driven metres across every leg: with a waypoint, leg one is only part of it. */
+function totalMetres(legs: DirectionsLeg[]): number {
+  return legs.reduce((total, leg) => total + (leg.distance?.value ?? 0), 0);
+}
+
+function totalSeconds(legs: DirectionsLeg[]): number {
+  return legs.reduce((total, leg) => total + (leg.duration?.value ?? 0), 0);
+}
+
+/**
+ * Reads a Google Directions answer into a summary, or null when it carries no route.
+ *
+ * The totals span every leg, which the earlier single-leg read did not: a run drawn
+ * from the driver through the pickup to the food bank was reported as the distance to
+ * the pickup alone, understating the drive a volunteer was agreeing to.
+ */
+export function summarizeDirections(result: DirectionsResult): {
+  summary: RouteSummary;
+  routeIndex: number;
+} | null {
+  const routes = result.routes ?? [];
+  if (!routes.length) return null;
+
+  let routeIndex = 0;
+  routes.forEach((candidate, index) => {
+    const best = totalMetres(routes[routeIndex]?.legs ?? []);
+    const metres = totalMetres(candidate.legs ?? []);
+    if (metres > 0 && (best === 0 || metres < best)) routeIndex = index;
+  });
+
+  const legs = routes[routeIndex]?.legs ?? [];
+  const metres = totalMetres(legs);
+  const seconds = totalSeconds(legs);
+  if (!metres) return null;
+
+  const steps = legs.flatMap((leg) =>
+    (leg.steps ?? []).map((step) => ({
+      instruction: toPlainInstruction(step.instructions ?? ""),
+      distanceMiles: (step.distance?.value ?? 0) / METRES_PER_MILE,
+    })),
+  );
+
+  return {
+    routeIndex,
+    summary: {
+      distance: formatMiles(metres / METRES_PER_MILE),
+      duration: formatMinutes(Math.max(1, Math.round(seconds / 60))),
+      followsRoads: true,
+      steps: steps.filter((step) => step.instruction),
+    },
+  };
+}
 
 /** Brand tokens, resolved to hex for Google Maps markers and overlays. */
 const MARKER_COLORS = {
@@ -172,7 +267,18 @@ function createMarkerPopup(point: MapPoint, externalLink: string) {
 
 export function getGoogleMapsDirectionsUrl(points: MapPoint[], route?: MapRoute): string {
   if (route) {
-    return `https://www.google.com/maps/dir/?api=1&origin=${route.origin.lat},${route.origin.lng}&destination=${route.destination.lat},${route.destination.lng}&travelmode=driving`;
+    const params = new URLSearchParams({
+      api: "1",
+      origin: `${route.origin.lat},${route.origin.lng}`,
+      destination: `${route.destination.lat},${route.destination.lng}`,
+      travelmode: "driving",
+    });
+    // Without this the handoff to Google Maps quietly drops the pickup, sending the
+    // driver straight to the food bank with nothing in the van.
+    if (route.waypoints?.length) {
+      params.set("waypoints", route.waypoints.map((w) => `${w.lat},${w.lng}`).join("|"));
+    }
+    return `https://www.google.com/maps/dir/?${params.toString()}`;
   }
   if (points.length === 1 && points[0]) {
     return `https://www.google.com/maps/search/?api=1&query=${points[0].lat},${points[0].lng}`;
@@ -246,9 +352,7 @@ export function LiveMap({
   compact?: boolean;
   points?: MapPoint[];
   route?: MapRoute | undefined;
-  onRouteSummary?:
-    | ((summary: { distance: string; duration: string; followsRoads?: boolean } | null) => void)
-    | undefined;
+  onRouteSummary?: ((summary: RouteSummary | null) => void) | undefined;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
@@ -349,6 +453,42 @@ export function LiveMap({
 
         const routeData = routeRef.current;
         if (routeData) {
+          /**
+           * The keyless road route, used when Google Directions cannot answer — most
+           * often because the browser key has Maps JS enabled but not the Directions
+           * API. Without it "Show route" drew nothing and the panel waited forever.
+           */
+          const drawWithoutDirectionsApi = async () => {
+            const fallback = await fetchDrivingRoute(
+              { latitude: routeData.origin.lat, longitude: routeData.origin.lng },
+              { latitude: routeData.destination.lat, longitude: routeData.destination.lng },
+              fetch,
+              {
+                waypoints: (routeData.waypoints ?? []).map((w) => ({
+                  latitude: w.lat,
+                  longitude: w.lng,
+                })),
+              },
+            );
+            if (!active) return;
+            const line = new maps.Polyline({
+              map,
+              path: fallback.path.map(([lat, lng]) => ({ lat, lng })),
+              strokeColor: "#004c25",
+              strokeWeight: 5,
+              // A straight-line estimate is drawn fainter than a road route, so the
+              // map does not claim more precision than it has.
+              strokeOpacity: fallback.followsRoads ? 0.9 : 0.5,
+            });
+            renderers.push(line);
+            onRouteSummaryRef.current?.({
+              distance: formatMiles(fallback.distanceMiles),
+              duration: formatMinutes(Math.max(1, fallback.durationMinutes)),
+              followsRoads: fallback.followsRoads,
+              steps: fallback.steps,
+            });
+          };
+
           const renderer = new maps.DirectionsRenderer({
             map,
             suppressMarkers: true,
@@ -366,23 +506,16 @@ export function LiveMap({
             })
             .then((result) => {
               if (!active) return;
+              const read = summarizeDirections(result);
+              // An empty answer is a failed answer: fall through to the keyless route
+              // rather than reporting null and leaving the panel loading.
+              if (!read) return drawWithoutDirectionsApi();
               renderer.setDirections(result);
-              const shortestRouteIndex = (result.routes ?? []).reduce(
-                (shortest, candidate, index, routes) => {
-                  const candidateDistance = candidate.legs?.[0]?.distance?.value ?? Infinity;
-                  const shortestDistance = routes[shortest]?.legs?.[0]?.distance?.value ?? Infinity;
-                  return candidateDistance < shortestDistance ? index : shortest;
-                },
-                0,
-              );
-              renderer.setRouteIndex(shortestRouteIndex);
-              const leg = result.routes?.[shortestRouteIndex]?.legs?.[0];
-              onRouteSummaryRef.current?.(
-                leg?.distance && leg.duration
-                  ? { distance: leg.distance.text, duration: leg.duration.text, followsRoads: true }
-                  : null,
-              );
+              renderer.setRouteIndex(read.routeIndex);
+              onRouteSummaryRef.current?.(read.summary);
+              return undefined;
             })
+            .catch(() => (active ? drawWithoutDirectionsApi() : undefined))
             .catch(() => {
               if (active) onRouteSummaryRef.current?.(null);
             });
@@ -487,7 +620,8 @@ export function LiveMap({
                       <DialogTitle>Configure Google Maps API Key</DialogTitle>
                       <DialogDescription>
                         Paste an authorized Google Maps Platform JavaScript API Key. It stays on
-                        this device and should be restricted to this site&apos;s domain in Google Cloud.
+                        this device and should be restricted to this site&apos;s domain in Google
+                        Cloud.
                       </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleSaveKey} className="space-y-4 pt-2">
@@ -579,5 +713,74 @@ export function LiveMap({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The drawn route's manoeuvres, as a driver reads them.
+ *
+ * Shown beside the map rather than on it: a route line answers "where", and a
+ * volunteer deciding whether to take a run also needs "how". The list scrolls at a
+ * fixed height so a long interstate drive cannot push the action buttons off screen.
+ */
+export function RouteDirections({
+  summary,
+  originLabel,
+  destinationLabel,
+}: {
+  summary: RouteSummary | null;
+  /** Where the directions start, e.g. "Your location". */
+  originLabel?: string | undefined;
+  destinationLabel?: string | undefined;
+}) {
+  if (!summary) return null;
+
+  if (!summary.steps.length) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        {summary.followsRoads
+          ? "Turn-by-turn directions are unavailable for this route. Open it in Google Maps to navigate."
+          : "Straight-line estimate only — routing was unavailable, so there are no turn-by-turn directions. Open the route in Google Maps to navigate."}
+      </p>
+    );
+  }
+
+  return (
+    <details className="group rounded-md border bg-muted/30 text-sm">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-medium">
+        <CornerUpRight className="size-4 shrink-0 text-primary" />
+        <span>Directions</span>
+        <span className="text-xs font-normal text-muted-foreground">
+          {summary.steps.length} step{summary.steps.length === 1 ? "" : "s"} · {summary.distance}
+        </span>
+        <span aria-hidden="true" className="ml-auto text-xs text-muted-foreground">
+          <span className="group-open:hidden">Show</span>
+          <span className="hidden group-open:inline">Hide</span>
+        </span>
+      </summary>
+      <div className="border-t px-3 py-2">
+        {originLabel && (
+          <p className="pb-2 text-xs text-muted-foreground">
+            From {originLabel}
+            {destinationLabel ? ` to ${destinationLabel}` : ""}
+          </p>
+        )}
+        <ol className="max-h-64 space-y-2 overflow-y-auto pr-1 text-xs leading-5">
+          {summary.steps.map((step, index) => (
+            <li key={`${index}-${step.instruction}`} className="flex gap-2">
+              <span className="w-4 shrink-0 text-right font-medium tabular-nums text-muted-foreground">
+                {index + 1}
+              </span>
+              <span className="min-w-0 flex-1">{step.instruction}</span>
+              {step.distanceMiles >= 0.05 && (
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {formatMiles(step.distanceMiles)}
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </details>
   );
 }

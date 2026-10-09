@@ -4,17 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   LiveMap,
+  RouteDirections,
+  getGoogleMapsDirectionsUrl,
   resetGoogleMapsStateForTesting,
+  summarizeDirections,
   type MapPoint,
 } from "@/components/rescuerelay/live-map";
 
 /** Counts constructions so a rebuild loop is visible rather than merely slow. */
 let mapConstructions = 0;
 let markerConstructions = 0;
+let polylineConstructions = 0;
 
-function installFakeMapsApi() {
+function installFakeMapsApi(routeImpl?: () => Promise<unknown>) {
   mapConstructions = 0;
   markerConstructions = 0;
+  polylineConstructions = 0;
   (window as unknown as { google: unknown }).google = {
     maps: {
       Map: class {
@@ -42,13 +47,19 @@ function installFakeMapsApi() {
       Point: class {},
       DirectionsService: class {
         route() {
-          return Promise.resolve({ routes: [] });
+          return routeImpl ? routeImpl() : Promise.resolve({ routes: [] });
         }
       },
       DirectionsRenderer: class {
         setMap() {}
         setDirections() {}
         setRouteIndex() {}
+      },
+      Polyline: class {
+        constructor() {
+          polylineConstructions += 1;
+        }
+        setMap() {}
       },
       TravelMode: { DRIVING: "DRIVING" },
     },
@@ -151,7 +162,10 @@ describe("LiveMap", () => {
     render(<LiveMap points={[{ ...PICKUP }]} />);
 
     await user.click(await screen.findByRole("button", { name: /set api key/i }));
-    await user.type(screen.getByRole("textbox", { name: "Google Maps API Key" }), "AIzaSavedBrowserKey");
+    await user.type(
+      screen.getByRole("textbox", { name: "Google Maps API Key" }),
+      "AIzaSavedBrowserKey",
+    );
     await user.click(screen.getByRole("button", { name: /save key/i }));
 
     await waitFor(() => {
@@ -189,5 +203,190 @@ describe("LiveMap stacking", () => {
     await screen.findByText("Riverbend Food Pantry");
 
     expect(container.firstElementChild?.className).toContain("isolate");
+  });
+});
+
+/** Two legs, as Google returns for driver → pickup → food bank. */
+const TWO_LEG_RESULT = {
+  routes: [
+    {
+      legs: [
+        {
+          distance: { text: "3.0 mi", value: 4828 },
+          duration: { text: "8 mins", value: 480 },
+          steps: [
+            { instructions: "Head <b>north</b> on <b>2nd Ave</b>", distance: { value: 1600 } },
+            {
+              instructions: "Turn <b>left</b>&nbsp;onto <b>Hickman Rd</b>",
+              distance: { value: 3228 },
+            },
+          ],
+        },
+        {
+          distance: { text: "5.0 mi", value: 8047 },
+          duration: { text: "12 mins", value: 720 },
+          steps: [
+            { instructions: "Turn <b>right</b> onto <b>E 17th St</b>", distance: { value: 8047 } },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+describe("Directions summary", () => {
+  // The old read took legs[0] only, so a run through a pickup was reported as the
+  // distance to the pickup — understating what a volunteer was signing up for.
+  it("totals every leg, not just the first", () => {
+    const read = summarizeDirections(TWO_LEG_RESULT);
+
+    expect(read?.summary.distance).toBe("8.0 mi");
+    expect(read?.summary.duration).toBe("20 min");
+    expect(read?.summary.followsRoads).toBe(true);
+  });
+
+  it("carries every leg's manoeuvres as plain text", () => {
+    const read = summarizeDirections(TWO_LEG_RESULT);
+
+    expect(read?.summary.steps.map((s) => s.instruction)).toEqual([
+      "Head north on 2nd Ave",
+      "Turn left onto Hickman Rd",
+      "Turn right onto E 17th St",
+    ]);
+  });
+
+  it("picks the alternative that is shortest over the whole trip", () => {
+    const read = summarizeDirections({
+      routes: [
+        {
+          legs: [
+            { distance: { text: "1 mi", value: 1000 }, duration: { text: "2", value: 120 } },
+            { distance: { text: "20 mi", value: 32000 }, duration: { text: "30", value: 1800 } },
+          ],
+        },
+        {
+          legs: [
+            { distance: { text: "5 mi", value: 8000 }, duration: { text: "9", value: 540 } },
+            { distance: { text: "5 mi", value: 8000 }, duration: { text: "9", value: 540 } },
+          ],
+        },
+      ],
+    });
+
+    expect(read?.routeIndex).toBe(1);
+  });
+
+  it("reports nothing when Google returned no usable route", () => {
+    expect(summarizeDirections({ routes: [] })).toBeNull();
+    expect(summarizeDirections({ routes: [{ legs: [] }] })).toBeNull();
+  });
+});
+
+describe("Route hand-off to Google Maps", () => {
+  it("keeps the pickup as a waypoint so the driver is not sent straight to the drop-off", () => {
+    const url = getGoogleMapsDirectionsUrl([], {
+      origin: { lat: 41.6, lng: -93.6 },
+      destination: { lat: 41.61, lng: -93.59 },
+      waypoints: [{ lat: 41.58, lng: -93.63 }],
+    });
+
+    expect(url).toContain("waypoints=41.58%2C-93.63");
+    expect(url).toContain("origin=41.6%2C-93.6");
+    expect(url).toContain("destination=41.61%2C-93.59");
+  });
+});
+
+describe("LiveMap route drawing", () => {
+  const ROUTE = {
+    origin: { lat: PICKUP.lat, lng: PICKUP.lng },
+    destination: { lat: BANK.lat, lng: BANK.lng },
+  };
+
+  it("reports the summed route when Google answers", async () => {
+    installFakeMapsApi(() => Promise.resolve(TWO_LEG_RESULT));
+    const onRouteSummary = vi.fn();
+    render(<LiveMap points={[PICKUP, BANK]} route={ROUTE} onRouteSummary={onRouteSummary} />);
+
+    await waitFor(() => expect(onRouteSummary).toHaveBeenCalled());
+    expect(onRouteSummary.mock.calls.at(-1)?.[0]).toMatchObject({
+      distance: "8.0 mi",
+      followsRoads: true,
+    });
+    expect(polylineConstructions).toBe(0);
+  });
+
+  // A browser key with Maps JS but not the Directions API left the panel waiting for
+  // a route that was never coming.
+  it("falls back to the keyless road route when the Directions API refuses", async () => {
+    installFakeMapsApi(() => Promise.reject(new Error("REQUEST_DENIED")));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: "Ok",
+        routes: [
+          {
+            distance: 12875,
+            duration: 1200,
+            geometry: {
+              coordinates: [
+                [PICKUP.lng, PICKUP.lat],
+                [BANK.lng, BANK.lat],
+              ],
+            },
+            legs: [
+              { steps: [{ distance: 1600, name: "2nd Avenue", maneuver: { type: "depart" } }] },
+            ],
+          },
+        ],
+      }),
+    } as unknown as Response);
+    const onRouteSummary = vi.fn();
+
+    render(<LiveMap points={[PICKUP, BANK]} route={ROUTE} onRouteSummary={onRouteSummary} />);
+
+    await waitFor(() => expect(onRouteSummary).toHaveBeenCalled());
+    const summary = onRouteSummary.mock.calls.at(-1)?.[0];
+    expect(summary).toMatchObject({ distance: "8.0 mi", followsRoads: true });
+    expect(summary.steps[0].instruction).toBe("Start the drive on 2nd Avenue");
+    // The route is drawn by hand, since DirectionsRenderer has nothing to render.
+    expect(polylineConstructions).toBe(1);
+    fetchSpy.mockRestore();
+  });
+});
+
+describe("RouteDirections", () => {
+  it("lists the manoeuvres a driver has to follow", async () => {
+    render(
+      <RouteDirections
+        summary={{
+          distance: "8.0 mi",
+          duration: "20 min",
+          followsRoads: true,
+          steps: [
+            { instruction: "Head north on 2nd Ave", distanceMiles: 1 },
+            { instruction: "Turn left onto Hickman Rd", distanceMiles: 2 },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Head north on 2nd Ave")).toBeInTheDocument();
+    expect(screen.getByText("Turn left onto Hickman Rd")).toBeInTheDocument();
+    expect(screen.getByText(/2 steps/)).toBeInTheDocument();
+  });
+
+  it("says so plainly when only a straight-line estimate was possible", () => {
+    render(
+      <RouteDirections
+        summary={{ distance: "8 mi", duration: "20 min", followsRoads: false, steps: [] }}
+      />,
+    );
+
+    expect(screen.getByText(/Straight-line estimate only/)).toBeInTheDocument();
+  });
+
+  it("renders nothing before a route has been drawn", () => {
+    const { container } = render(<RouteDirections summary={null} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

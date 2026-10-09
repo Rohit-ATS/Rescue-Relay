@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LiveMap, type MapRoute } from "@/components/rescuerelay/live-map";
+import { LiveMap, RouteDirections, type RouteSummary } from "@/components/rescuerelay/live-map";
 import {
   appleDirectionsUrl,
   directionsUrl,
@@ -102,22 +102,9 @@ export function OpportunityCard({
   routeActive: boolean;
   onToggleRoute: () => void;
 }) {
-  const [routeSummary, setRouteSummary] = useState<{ distance: string; duration: string } | null>(
-    null,
-  );
   const o = opportunity;
   const bank = o.foodBank;
   const routable = Boolean(bank && hasPosition(o.pickup) && hasPosition(bank));
-  const mapRoute = useMemo<MapRoute | undefined>(
-    () =>
-      routable && bank
-        ? {
-            origin: { lat: o.pickup.latitude, lng: o.pickup.longitude },
-            destination: { lat: bank.latitude, lng: bank.longitude },
-          }
-        : undefined,
-    [routable, bank, o.pickup],
-  );
   const deadline = deadlineLabel(o.pickupDeadline, now);
 
   const status = o.claimable
@@ -232,7 +219,8 @@ export function OpportunityCard({
               size="sm"
               className="text-destructive hover:text-destructive"
               onClick={() => {
-                if (window.confirm("Delete this surplus post? This cannot be undone.")) onDelete(o.donationId);
+                if (window.confirm("Delete this surplus post? This cannot be undone."))
+                  onDelete(o.donationId);
               }}
             >
               <Trash2 /> Delete post
@@ -915,11 +903,7 @@ export function PartnerDetail({
   const located = hasPosition(partner);
   const destination = { latitude: partner.latitude, longitude: partner.longitude };
   const origin = viewer && hasPosition(viewer) ? viewer : destination;
-  const [routeSummary, setRouteSummary] = useState<{
-    distance: string;
-    duration: string;
-    followsRoads?: boolean;
-  } | null>(null);
+  const [routeSummary, setRouteSummary] = useState<RouteSummary | null>(null);
   const hasContact = Boolean(
     partner.phone || partner.contactEmail || partner.hoursNote || partner.website,
   );
@@ -1076,7 +1060,15 @@ export function PartnerDetail({
                     },
                   ]}
                   route={
-                    viewer && hasPosition(viewer) ? { origin: viewer, destination } : undefined
+                    viewer && hasPosition(viewer)
+                      ? {
+                          // MapRoute carries lat/lng; the rest of the app carries
+                          // latitude/longitude, and handing the map the latter made
+                          // every directions request fail silently.
+                          origin: { lat: viewer.latitude, lng: viewer.longitude },
+                          destination: { lat: destination.latitude, lng: destination.longitude },
+                        }
+                      : undefined
                   }
                   onRouteSummary={setRouteSummary}
                 />
@@ -1087,11 +1079,22 @@ export function PartnerDetail({
                         <>
                           <span className="font-medium">Driving route:</span>{" "}
                           {routeSummary.distance} · {routeSummary.duration}
+                          {routeSummary.followsRoads === false && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              (estimated — routing unavailable)
+                            </span>
+                          )}
                         </>
                       ) : (
                         "Finding the shortest driving route…"
                       )}
                     </p>
+                    <RouteDirections
+                      summary={routeSummary}
+                      originLabel="your location"
+                      destinationLabel={partner.name}
+                    />
                     <div className="flex flex-wrap gap-2">
                       <Button asChild variant="outline" size="sm">
                         <a
@@ -1463,19 +1466,22 @@ export function ActivityCard({
               )}
             </Button>
           )}
-          {activity.role === "donor" && ["open", "matched"].includes(activity.status ?? "") && onDelete && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              disabled={busy}
-              onClick={() => {
-                if (window.confirm("Delete this surplus post? This cannot be undone.")) onDelete(activity.donationId);
-              }}
-            >
-              <Trash2 /> Delete post
-            </Button>
-          )}
+          {activity.role === "donor" &&
+            ["open", "matched"].includes(activity.status ?? "") &&
+            onDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm("Delete this surplus post? This cannot be undone."))
+                    onDelete(activity.donationId);
+                }}
+              >
+                <Trash2 /> Delete post
+              </Button>
+            )}
           <Button variant="outline" size="sm" onClick={() => onOpen(activity.donationId)}>
             Open rescue <ArrowRight />
           </Button>

@@ -18,11 +18,27 @@ export type PublicFoodBank = {
   longitude: number;
 };
 
-const ENDPOINT = "https://overpass-api.de/api/interpreter";
+/**
+ * Mirrors, tried in order. The main instance answers 429 or 504 often enough that a
+ * single endpoint meant the map silently showed no public food banks at all; the
+ * mirrors run the same software over the same data.
+ */
+const ENDPOINTS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
 /** Overpass is a shared free service; a slow answer is dropped rather than queued. */
 const REQUEST_TIMEOUT_MS = 20000;
-/** Matches the pilot's working radius. Metres, as Overpass expects. */
-export const DEFAULT_RADIUS_M = 80000;
+/**
+ * Statewide reach from the pilot centre: 200 km out of Des Moines covers Sioux City,
+ * Waterloo, Davenport and Ottumwa, so the map shows Iowa's mapped food banks rather
+ * than only the metro's. Larger `around` radii make Overpass time out, which is why
+ * this is not simply set to the state's longest diagonal. Metres, as Overpass expects.
+ */
+export const DEFAULT_RADIUS_M = 200000;
+/** Two facilities mapped this close together with the same name are one facility. */
+const DUPLICATE_DISTANCE_DEG = 0.002;
 
 type OverpassElement = {
   type?: string;
@@ -38,11 +54,21 @@ type OverpassElement = {
  * `nwr` covers nodes, ways and relations, because a food bank may be mapped as a
  * point, a building outline or a multipolygon. `out center` collapses the latter two
  * to a single coordinate, which is all a marker needs.
+ *
+ * Two tagging conventions are both in use, and matching only the first one hid most
+ * of the pantries in the pilot state:
+ *   - `social_facility=food_bank`, the current tag, matched by regex so a facility
+ *     carrying a combined value such as "outreach, food_bank" is still found;
+ *   - `amenity=food_bank`, the older spelling, still on the map in places.
  */
 export function buildQuery(latitude: number, longitude: number, radiusM: number): string {
+  const around = `(around:${Math.round(radiusM)},${latitude},${longitude})`;
   return (
     `[out:json][timeout:25];` +
-    `nwr["social_facility"="food_bank"](around:${Math.round(radiusM)},${latitude},${longitude});` +
+    `(` +
+    `nwr["social_facility"~"food_bank"]${around};` +
+    `nwr["amenity"="food_bank"]${around};` +
+    `);` +
     `out center;`
   );
 }
@@ -66,6 +92,60 @@ function toFoodBank(element: OverpassElement): PublicFoodBank | null {
 }
 
 /**
+ * Drops the second copy of a facility mapped more than once.
+ *
+ * Matching on id alone is not enough: the union query reaches the same building as
+ * both a node and a way, and those carry different ids. Same name, near-identical
+ * position, so one pin.
+ */
+function dedupe(banks: PublicFoodBank[]): PublicFoodBank[] {
+  const kept: PublicFoodBank[] = [];
+  const seenIds = new Set<string>();
+  for (const bank of banks) {
+    if (seenIds.has(bank.id)) continue;
+    seenIds.add(bank.id);
+    const key = bank.name.toLowerCase();
+    const duplicate = kept.some(
+      (other) =>
+        other.name.toLowerCase() === key &&
+        Math.abs(other.latitude - bank.latitude) < DUPLICATE_DISTANCE_DEG &&
+        Math.abs(other.longitude - bank.longitude) < DUPLICATE_DISTANCE_DEG,
+    );
+    if (!duplicate) kept.push(bank);
+  }
+  return kept;
+}
+
+async function askOverpass(
+  endpoint: string,
+  query: string,
+  fetchImpl: typeof fetch,
+  signal: AbortSignal | undefined,
+): Promise<OverpassElement[] | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort);
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `data=${encodeURIComponent(query)}`,
+    });
+    if (!response.ok) return null;
+
+    const body = (await response.json()) as { elements?: OverpassElement[] };
+    return Array.isArray(body?.elements) ? body.elements : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+  }
+}
+
+/**
  * Finds public food banks around a point.
  *
  * Never rejects: a failure yields an empty list, so the map simply shows the
@@ -79,35 +159,16 @@ export async function fetchPublicFoodBanks(
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
 
   const fetchImpl = options.fetchImpl ?? fetch;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  options.signal?.addEventListener("abort", () => controller.abort());
+  const query = buildQuery(latitude, longitude, options.radiusM ?? DEFAULT_RADIUS_M);
 
-  try {
-    const response = await fetchImpl(ENDPOINT, {
-      method: "POST",
-      signal: controller.signal,
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `data=${encodeURIComponent(buildQuery(latitude, longitude, options.radiusM ?? DEFAULT_RADIUS_M))}`,
-    });
-    if (!response.ok) return [];
+  for (const endpoint of ENDPOINTS) {
+    if (options.signal?.aborted) return [];
+    const elements = await askOverpass(endpoint, query, fetchImpl, options.signal);
+    if (!elements) continue;
 
-    const body = (await response.json()) as { elements?: OverpassElement[] };
-    if (!Array.isArray(body?.elements)) return [];
-
-    const seen = new Set<string>();
-    return body.elements
-      .map(toFoodBank)
-      .filter((f): f is PublicFoodBank => f !== null)
-      .filter((f) => {
-        // A facility mapped as both a node and a building appears twice.
-        if (seen.has(f.id)) return false;
-        seen.add(f.id);
-        return true;
-      });
-  } catch {
-    return [];
-  } finally {
-    clearTimeout(timer);
+    const banks = elements.map(toFoodBank).filter((f): f is PublicFoodBank => f !== null);
+    // An empty answer from a working mirror is an answer: there is nothing there.
+    return dedupe(banks);
   }
+  return [];
 }
