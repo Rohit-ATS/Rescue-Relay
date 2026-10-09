@@ -39,7 +39,11 @@ async function fetchJson(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
+    const response = await fetch(url, {
+      ...init,
+      redirect: init?.redirect ?? "error",
+      signal: controller.signal,
+    });
     const text = await response.text();
     let body: unknown;
     try {
@@ -88,6 +92,31 @@ function readGooglePayload(
   return { latitude, longitude, provider, ...(formatted ? { formattedAddress: formatted } : {}) };
 }
 
+function readGoogleV4Payload(body: unknown, text: string): GeocodeResult | null {
+  const payload = body as
+    | {
+        results?: Array<{
+          formattedAddress?: string;
+          location?: { latitude?: number; longitude?: number };
+        }>;
+      }
+    | undefined;
+  const result = payload?.results?.[0];
+  if (!result) {
+    if (payload?.results) return null;
+    throw new Error(`google_direct: unreadable response ${text.slice(0, 200)}`);
+  }
+  const latitude = finite(result.location?.latitude);
+  const longitude = finite(result.location?.longitude);
+  if (latitude === undefined || longitude === undefined) return null;
+  return {
+    latitude,
+    longitude,
+    provider: "google_direct",
+    ...(result.formattedAddress ? { formattedAddress: result.formattedAddress } : {}),
+  };
+}
+
 const googleGateway: Provider = {
   name: "google_gateway",
   configured: () => Boolean(process.env["LOVABLE_API_KEY"] && process.env["GOOGLE_MAPS_API_KEY"]),
@@ -114,14 +143,21 @@ const googleGateway: Provider = {
 
 const googleDirect: Provider = {
   name: "google_direct",
-  // Only useful with an unrestricted server key; a referer-restricted key is rejected by the Geocoding API.
+  // Google Geocoding v4 accepts the server key in a header, so it never enters
+  // a request URL that may be retained by an egress log.
   configured: () => Boolean(process.env["GOOGLE_MAPS_API_KEY"] && !process.env["LOVABLE_API_KEY"]),
   lookup: async (address) => {
     const { ok, status, body, text } = await fetchJson(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${encodeURIComponent(process.env["GOOGLE_MAPS_API_KEY"] as string)}`,
+      `https://geocode.googleapis.com/v4/geocode/address/${encodeURIComponent(address)}`,
+      {
+        headers: {
+          "X-Goog-Api-Key": process.env["GOOGLE_MAPS_API_KEY"] as string,
+          "X-Goog-FieldMask": "results.location,results.formattedAddress",
+        },
+      },
     );
     if (!ok) throw new Error(`google_direct: HTTP ${status}`);
-    return readGooglePayload(body, text, "google_direct");
+    return readGoogleV4Payload(body, text);
   },
 };
 

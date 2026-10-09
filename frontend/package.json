@@ -8,7 +8,7 @@
     "build": "vite build",
     "build:pages": "vite build && node scripts/prepare-pages.mjs",
     "build:dev": "vite build --mode development",
-    "preview": "vite preview",
+    "preview": "node scripts/preview-pages.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",

@@ -72,18 +72,21 @@ describe('AiWorkflows Component', () => {
 
   it('displays the Mistral AI MCP badge in the header', () => {
     render(<AiWorkflows data={mockData} role="coordinator" />);
-    expect(screen.getByText('Mistral AI MCP (100% Verified)')).toBeInTheDocument();
+    expect(screen.getByText('Mistral AI MCP')).toBeInTheDocument();
   });
 });
 
 describe('Mistral MCP & Social Connectors Library', () => {
-  it('testSocialConnection returns 100% success and diagnostic metrics for all platforms', async () => {
+  it('testSocialConnection reports diagnostics, and reports ok=false when the MCP server is unreachable', async () => {
     const { testSocialConnection } = await import('@/lib/social-agents');
     for (const platform of ['facebook', 'instagram', 'linkedin', 'x', 'google_business']) {
       const res = await testSocialConnection(platform, {
         handle: `@test_${platform}`,
       });
-      expect(res.ok).toBe(true);
+      // No MCP server is reachable under test, so the connection must not be
+      // reported as verified — that claim is only true for a live handshake.
+      expect(res.ok).toBe(false);
+      expect(res.message).toMatch(/simulated/i);
       expect(res.platform).toBe(platform);
       expect(res.latencyMs).toBeGreaterThan(0);
       expect(res.scopes).toContain('posts.write');

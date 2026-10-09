@@ -26,6 +26,7 @@ import {
   Cpu,
   Wrench,
   type LucideIcon,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -269,8 +270,8 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
         content: '📢 FRESH FOOD ARRIVAL IN DES MOINES! We have just received 150 lbs of fresh, chef-prepared refrigerated meals (~125 meals) at Hope Community Pantry!\n\n📍 Distribution starts at 2:00 PM today at 1200 Grand Ave.\nFree and open to everyone in our community. First-come, first-served. Please share with neighborhood groups!',
         status: 'published',
         timestamp: 'Today at 1:20 PM',
-        reach: '1,420 people reached · 45 shares',
-        dryRun: false,
+        reach: 'Sample reach figure · demo data',
+        dryRun: true,
         externalUrl: 'https://facebook.com/hopecommunitypantry/posts/1',
       },
       {
@@ -282,8 +283,8 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
         content: '📢 FRESH FOOD ALERT in Des Moines! Thanks to Capitol Fresh Market, we have received fresh refrigerated meals at Hope Community Pantry!\n\n📍 Distribution at 1200 Grand Ave.\nFree and open to all.',
         status: 'published',
         timestamp: 'Today at 1:15 PM',
-        reach: '640 people reached · 28 shares',
-        dryRun: false,
+        reach: 'Sample reach figure · demo data',
+        dryRun: true,
       },
       {
         id: 'post-2',
@@ -294,8 +295,8 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
         content: '🤝 PARTNER ALERT: 80 lbs of safe bakery & dairy surplus incoming from Downtown Grocers. Hope Pantry has 40 lbs spare cold capacity. Any sister shelter with immediate intake availability, please coordinate via RescueRelay or reply to dispatch.',
         status: 'published',
         timestamp: 'Today at 11:30 AM',
-        reach: 'Delivered to 12 partner shelters',
-        dryRun: false,
+        reach: 'Sample delivery figure · demo data',
+        dryRun: true,
       },
     ];
   });
@@ -445,7 +446,11 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
             allergens: activeRescue.allergens,
           });
           setAuditResult(audit);
-          toast.success(`Generated using Mistral AI MCP (${selectedModel})`);
+          toast.success(
+            mistralRes.isLive
+              ? `Generated using Mistral AI MCP (${selectedModel})`
+              : 'Generated locally — Mistral MCP server unreachable',
+          );
           setIsGenerating(false);
           return;
         }
@@ -557,7 +562,7 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
     const mcpServer = channelObj?.mcpServer || `mcp-${targetPlatform}`;
 
     // Invoke real MCP server tool call
-    toast.loading(`Invoking real-time MCP server [${mcpServer}]...`, { id: 'mcp-publish' });
+    toast.loading(`Contacting MCP server [${mcpServer}]...`, { id: 'mcp-publish' });
     const mcpRes = await callMcpTool(mcpServer, 'create_post', {
       text: generatedDraft,
       message: generatedDraft,
@@ -583,7 +588,12 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
     const nextPosts = [newPost, ...posts];
     setPosts(nextPosts);
     broadcastWorkflowUpdate({ type: 'post_published', post: newPost });
-    toast.success(`Broadcast published via ${mcpServer} in real time!`, { id: 'mcp-publish' });
+    toast.success(
+      mcpRes.isLive
+        ? `Broadcast published via ${mcpServer} in real time!`
+        : `Simulated broadcast — ${mcpServer} not connected`,
+      { id: 'mcp-publish' },
+    );
     setActiveTab('history');
   };
 
@@ -602,7 +612,7 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
       return;
     }
 
-    toast.loading(`Broadcasting via real-time MCPs to ${connectedChannels.length} channels...`, { id: 'broadcast-all' });
+    toast.loading(`Broadcasting to ${connectedChannels.length} channels...`, { id: 'broadcast-all' });
 
     const newBroadcasts: BroadcastPost[] = [];
 
@@ -612,7 +622,7 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
         `📢 ${activeRescue.pounds} lbs of ${activeRescue.title} available now at ${activeRescue.pickup_address}! Verified safe handling on RescueRelay.`;
 
       // Call the corresponding platform's MCP tool
-      await callMcpTool(ch.mcpServer, ch.platform === 'facebook' ? 'create_page_post' : 'create_post', {
+      const chRes = await callMcpTool(ch.mcpServer, ch.platform === 'facebook' ? 'create_page_post' : 'create_post', {
         message: copy,
         text: copy,
       });
@@ -626,15 +636,23 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
         content: copy,
         status: 'published',
         timestamp: 'Just now',
-        reach: `Broadcast live to ${ch.audience}`,
-        dryRun: false,
+        reach: chRes.isLive ? `Broadcast live to ${ch.audience}` : 'Simulated — MCP server not connected',
+        dryRun: !chRes.isLive,
       });
     }
 
     setPosts([...newBroadcasts, ...posts]);
     broadcastWorkflowUpdate({ type: 'batch_broadcast', count: newBroadcasts.length });
     setIsBroadcastingAll(false);
-    toast.success(`Successfully published across ${connectedChannels.length} channels via real MCP servers!`, { id: 'broadcast-all' });
+    const liveCount = newBroadcasts.filter((b) => !b.dryRun).length;
+    toast.success(
+      liveCount === newBroadcasts.length
+        ? `Published across ${newBroadcasts.length} channels via MCP servers!`
+        : liveCount === 0
+          ? `Simulated broadcast to ${newBroadcasts.length} channels — MCP servers not connected`
+          : `Published to ${liveCount} of ${newBroadcasts.length} channels; the rest were simulated`,
+      { id: 'broadcast-all' },
+    );
     setActiveTab('history');
   };
 
@@ -671,17 +689,18 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
         handle: customHandleInput,
       });
       setTestResult(res);
-      toast.success(`100% Real-Time Connection Verified (${res.latencyMs}ms)`, { id: 'test-conn' });
+      if (res.ok) toast.success(`Real-time connection verified (${res.latencyMs}ms)`, { id: 'test-conn' });
+      else toast.warning('MCP server unreachable — showing a simulated connection', { id: 'test-conn' });
     } catch {
       setTestResult({
-        ok: true,
+        ok: false,
         platform,
-        message: `Connected via Real-Time MCP Gateway for ${platform.toUpperCase()}`,
+        message: `Could not reach the ${platform.toUpperCase()} MCP gateway — simulated connection only`,
         latencyMs: 32,
         handle: customHandleInput || `@RescueRelay_${platform.toUpperCase()}`,
         scopes: ['posts.write', 'broadcast'],
       });
-      toast.success(`Connection verified via MCP gateway!`, { id: 'test-conn' });
+      toast.warning('MCP gateway unreachable — showing a simulated connection', { id: 'test-conn' });
     } finally {
       setIsTestingConnection(false);
     }
@@ -727,7 +746,7 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
                 title="Click to configure Mistral AI MCP settings"
               >
                 <Cpu className="size-3 text-amber-600 dark:text-amber-400" />
-                Mistral AI MCP (100% Verified)
+                Mistral AI MCP
               </Badge>
               <Badge variant="outline" className="text-xs">
                 Facebook Page Added
@@ -735,7 +754,7 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
             </div>
             <h2 className="mt-2 text-2xl font-semibold md:text-3xl">AI Social & Broadcast Workflows</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Automate real-time food rescue announcements to Facebook, LinkedIn, Instagram, X (Twitter), and Google Maps with Mistral AI MCP tools and 100% verified social connectors.
+              Automate food rescue announcements to Facebook, LinkedIn, Instagram, X (Twitter), and Google Maps through Mistral AI MCP tools. Channels run simulated until their MCP servers are connected.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1379,7 +1398,7 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
                     <span className="text-xs text-muted-foreground">via {post.channel}</span>
                     {post.dryRun && (
                       <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                        MCP Dry-Run
+                        Simulated
                       </Badge>
                     )}
                   </div>
@@ -1491,14 +1510,20 @@ export function AiWorkflows({ data }: AiWorkflowsProps) {
 
             {/* Test Connection Diagnostic Box */}
             {testResult && (
-              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs space-y-1">
-                <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-semibold">
+              <div className={`rounded-md border p-3 text-xs space-y-1 ${testResult.ok ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
+                <div className={`flex items-center justify-between font-semibold ${testResult.ok ? 'text-emerald-800 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-300'}`}>
                   <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="size-4 text-emerald-600" />
-                    Connection Verified (Latency: {testResult.latencyMs}ms)
+                    {testResult.ok ? (
+                      <CheckCircle2 className="size-4 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle className="size-4 text-amber-600" />
+                    )}
+                    {testResult.ok
+                      ? `Connection Verified (Latency: ${testResult.latencyMs}ms)`
+                      : 'MCP server unreachable — simulated connection'}
                   </span>
-                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-700 dark:text-emerald-300">
-                    Active Handshake
+                  <Badge variant="outline" className={`text-[10px] ${testResult.ok ? 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'border-amber-500/30 text-amber-700 dark:text-amber-300'}`}>
+                    {testResult.ok ? 'Active Handshake' : 'Simulated'}
                   </Badge>
                 </div>
                 <p className="text-muted-foreground text-[11px]">

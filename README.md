@@ -77,7 +77,7 @@ Password reset and the resend-confirmation button on `/auth` depend on the same 
 
 | Variable | Effect when absent |
 | --- | --- |
-| `GOOGLE_MAPS_API_KEY` | Pickup geocoding falls back to the keyless providers below. Must be an **unrestricted server key** — a referer-restricted browser key is rejected by the Geocoding API. |
+| `GOOGLE_MAPS_API_KEY` | Pickup geocoding falls back to the keyless providers below. For direct Google geocoding, enable **Geocoding API v4** and use a server key restricted to that API and the deployment's egress IPs where available. |
 | `LOVABLE_API_KEY` | The Lovable connector gateway is skipped; set it together with `GOOGLE_MAPS_API_KEY` to route geocoding through Lovable. |
 | `VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY` | The dashboard map panel shows a configuration notice; all other views work. |
 
@@ -90,7 +90,7 @@ Posting a donation needs coordinates before it can be scored against recipients,
 [`src/lib/geocode.server.ts`](frontend/src/lib/geocode.server.ts):
 
 1. **Lovable connector gateway** — when `LOVABLE_API_KEY` and `GOOGLE_MAPS_API_KEY` are both set.
-2. **Google Geocoding direct** — when an unrestricted `GOOGLE_MAPS_API_KEY` is set on its own.
+2. **Google Geocoding v4 direct** — when `GOOGLE_MAPS_API_KEY` is set on its own; the key is sent in `X-Goog-Api-Key`, never in the URL.
 3. **US Census geocoder** — keyless, public domain, US addresses only.
 4. **Nominatim (OpenStreetMap)** — keyless, global; called with an identifying User-Agent and throttled to one request per 1.1s per the OSM usage policy.
 

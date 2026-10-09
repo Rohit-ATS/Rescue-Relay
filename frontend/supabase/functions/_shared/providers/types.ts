@@ -35,7 +35,11 @@ export interface OAuthProvider {
   configured(): boolean;
   usesPkce: boolean;
   authorizeUrl(args: { state: string; redirectUri: string; codeChallenge?: string }): string;
-  exchangeCode(args: { code: string; redirectUri: string; codeVerifier?: string | null }): Promise<TokenSet>;
+  exchangeCode(args: {
+    code: string;
+    redirectUri: string;
+    codeVerifier?: string | null;
+  }): Promise<TokenSet>;
   refresh?(refreshToken: string): Promise<TokenSet>;
   identify(tokens: TokenSet, hint: { orgName: string }): Promise<AccountIdentity>;
 }
@@ -59,7 +63,13 @@ function describe(body: unknown): string {
   if (!body || typeof body !== "object") return typeof body === "string" ? body.slice(0, 300) : "";
   const b = body as Record<string, any>;
   return String(
-    b.error?.message ?? b.error_description ?? b.detail ?? b.message ?? b.title ?? b.errors?.[0]?.message ?? JSON.stringify(b).slice(0, 300),
+    b.error?.message ??
+      b.error_description ??
+      b.detail ??
+      b.message ??
+      b.title ??
+      b.errors?.[0]?.message ??
+      JSON.stringify(b).slice(0, 300),
   );
 }
 
@@ -77,7 +87,10 @@ export async function apiFetch<T = any>(
   } else if (body && typeof body === "string" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(url, { ...rest, headers, body });
+  // Provider calls can carry OAuth client credentials or bearer tokens in the
+  // request body or headers. Do not let a provider redirect that request to a
+  // different origin and receive those credentials.
+  const res = await fetch(url, { ...rest, redirect: rest.redirect ?? "error", headers, body });
   const text = await res.text();
   let data: any = null;
   try {
@@ -86,8 +99,12 @@ export async function apiFetch<T = any>(
     data = text;
   }
   if (!res.ok) {
-    throw new ProviderError(platform, res.status, `${platform} API ${res.status}: ${describe(data)}`, data);
+    throw new ProviderError(
+      platform,
+      res.status,
+      `${platform} API ${res.status}: ${describe(data)}`,
+      data,
+    );
   }
   return { data: data as T, headers: res.headers };
 }
-

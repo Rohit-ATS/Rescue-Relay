@@ -898,18 +898,19 @@ export function PartnerDetail({
   onVerify: (id: string, status: "verified" | "suspended") => void;
   onClose: () => void;
 }) {
-  if (!partner) return null;
-  const isRecipient = partner.type === "recipient";
-  const located = hasPosition(partner);
-  const destination = { latitude: partner.latitude, longitude: partner.longitude };
+  // Hooks must run before the null guard: the selected partner can be cleared
+  // while this dialog component remains mounted.
+  const isRecipient = partner?.type === "recipient";
+  const located = Boolean(partner && hasPosition(partner));
+  const destination = { latitude: partner?.latitude ?? 0, longitude: partner?.longitude ?? 0 };
   const origin = viewer && hasPosition(viewer) ? viewer : destination;
   const [routeSummary, setRouteSummary] = useState<RouteSummary | null>(null);
   const hasContact = Boolean(
-    partner.phone || partner.contactEmail || partner.hoursNote || partner.website,
+    partner?.phone || partner?.contactEmail || partner?.hoursNote || partner?.website,
   );
 
   useEffect(() => {
-    if (!located || !viewer || !hasPosition(viewer)) {
+    if (!partner || !located || !viewer || !hasPosition(viewer)) {
       setRouteSummary(null);
       return;
     }
@@ -919,10 +920,12 @@ export function PartnerDetail({
     destination.latitude,
     destination.longitude,
     located,
-    partner.id,
+    partner?.id,
     viewer?.latitude,
     viewer?.longitude,
   ]);
+
+  if (!partner) return null;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
