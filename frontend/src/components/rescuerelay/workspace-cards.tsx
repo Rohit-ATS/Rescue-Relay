@@ -417,7 +417,15 @@ type DetailMatch = {
   explanation: string;
   status: string;
 };
-type DetailOrg = { id: string; name: string; address: string; latitude: number; longitude: number };
+type DetailOrg = {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  /** Optional until the partner-photo migration has been applied remotely. */
+  photo_url?: string | null;
+};
 type DetailDelivery = {
   driver_name?: string;
   picked_up_at?: string | null;
@@ -487,6 +495,7 @@ export function RescueDetailDialog({
             lng: recipient.longitude,
             label: recipient.name,
             kind: "recipient" as const,
+            photoUrl: recipient.photo_url ?? null,
           },
         ]
       : []),
@@ -1060,6 +1069,7 @@ export function PartnerDetail({
                       lng: partner.longitude,
                       label: partner.name,
                       kind: isRecipient ? "recipient" : "donor",
+                      photoUrl: partner.photoUrl,
                     },
                   ]}
                   route={

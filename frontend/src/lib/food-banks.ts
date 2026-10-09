@@ -16,6 +16,8 @@ export type PublicFoodBank = {
   name: string;
   latitude: number;
   longitude: number;
+  /** The OSM `image` tag, when a mapper supplied one. Most entries have none. */
+  photoUrl: string | null;
 };
 
 /**
@@ -82,12 +84,16 @@ function toFoodBank(element: OverpassElement): PublicFoodBank | null {
   // Unnamed entries are real facilities but useless as a map label, so they are
   // given the generic name rather than dropped.
   const name = element.tags?.["name"]?.trim() || "Food bank";
+  // OSM carries a photo only when a mapper added one, and it may be any scheme;
+  // the map popup decides whether the URL is one it will load.
+  const photoUrl = element.tags?.["image"]?.trim() || null;
 
   return {
     id: `${element.type}/${element.id}`,
     name,
     latitude: latitude as number,
     longitude: longitude as number,
+    photoUrl,
   };
 }
 

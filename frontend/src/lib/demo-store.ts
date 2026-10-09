@@ -37,6 +37,16 @@ export interface WorkspaceData {
 
 export const DEMO_USER_ID = "d0000000-0000-4000-a000-000000000004"; // Coordinator role by default for full inspection
 
+/**
+ * The donor behind the sample surplus posts.
+ *
+ * Deliberately not the demo viewer. Owner-only controls — deleting a post, above all
+ * — read `donor_user_id`, and attributing the seeded posts to the viewer let them
+ * delete sample rescues they never created. The viewer still sees every seeded post
+ * as a coordinator; what they can remove is what they posted themselves.
+ */
+export const DEMO_SEED_DONOR_USER_ID = "d0000000-0000-4000-a000-000000000005";
+
 export const INITIAL_ORGANIZATIONS: Organization[] = [
   {
     id: "d2000000-0000-4000-a000-000000000001",
@@ -261,7 +271,7 @@ export function getInitialDonations(now = Date.now()): Donation[] {
   return [
     {
       id: "d1000000-0000-4000-a000-000000000001",
-      donor_user_id: DEMO_USER_ID,
+      donor_user_id: DEMO_SEED_DONOR_USER_ID,
       donor_org_id: "d2000000-0000-4000-a000-000000000008",
       title: "Hot line prepared meals",
       category: "prepared meals",
@@ -280,7 +290,7 @@ export function getInitialDonations(now = Date.now()): Donation[] {
     },
     {
       id: "d1000000-0000-4000-a000-000000000002",
-      donor_user_id: DEMO_USER_ID,
+      donor_user_id: DEMO_SEED_DONOR_USER_ID,
       donor_org_id: "d2000000-0000-4000-a000-000000000009",
       title: "Bakery surplus trays",
       category: "bakery",
@@ -299,7 +309,7 @@ export function getInitialDonations(now = Date.now()): Donation[] {
     },
     {
       id: "d1000000-0000-4000-a000-000000000003",
-      donor_user_id: DEMO_USER_ID,
+      donor_user_id: DEMO_SEED_DONOR_USER_ID,
       donor_org_id: "d2000000-0000-4000-a000-000000000008",
       title: "Chilled produce flats",
       category: "produce",
@@ -318,7 +328,7 @@ export function getInitialDonations(now = Date.now()): Donation[] {
     },
     {
       id: "d1000000-0000-4000-a000-000000000004",
-      donor_user_id: DEMO_USER_ID,
+      donor_user_id: DEMO_SEED_DONOR_USER_ID,
       donor_org_id: "d2000000-0000-4000-a000-000000000009",
       title: "Dairy case pull",
       category: "dairy",
@@ -337,7 +347,7 @@ export function getInitialDonations(now = Date.now()): Donation[] {
     },
     {
       id: "d1000000-0000-4000-a000-000000000005",
-      donor_user_id: DEMO_USER_ID,
+      donor_user_id: DEMO_SEED_DONOR_USER_ID,
       donor_org_id: "d2000000-0000-4000-a000-000000000009",
       title: "Catering overage",
       category: "prepared meals",
@@ -356,7 +366,7 @@ export function getInitialDonations(now = Date.now()): Donation[] {
     },
     {
       id: "d1000000-0000-4000-a000-000000000006",
-      donor_user_id: DEMO_USER_ID,
+      donor_user_id: DEMO_SEED_DONOR_USER_ID,
       donor_org_id: "d2000000-0000-4000-a000-000000000008",
       title: "Weekend produce rescue",
       category: "produce",
@@ -375,7 +385,7 @@ export function getInitialDonations(now = Date.now()): Donation[] {
     },
     {
       id: "d1000000-0000-4000-a000-000000000007",
-      donor_user_id: DEMO_USER_ID,
+      donor_user_id: DEMO_SEED_DONOR_USER_ID,
       donor_org_id: "d2000000-0000-4000-a000-000000000009",
       title: "Frozen entree surplus",
       category: "prepared meals",
@@ -394,7 +404,7 @@ export function getInitialDonations(now = Date.now()): Donation[] {
     },
     {
       id: "d1000000-0000-4000-a000-000000000008",
-      donor_user_id: DEMO_USER_ID,
+      donor_user_id: DEMO_SEED_DONOR_USER_ID,
       donor_org_id: "d2000000-0000-4000-a000-000000000009",
       title: "Community breakfast boxes (demo)",
       category: "bakery",

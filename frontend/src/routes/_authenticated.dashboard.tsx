@@ -47,7 +47,16 @@ function Dashboard(){
  // land in a per-browser store that no other screen can read.
  const {demoOnly}=Route.useRouteContext() as {demoOnly?:boolean};
  const {data,error,isPending,isFetching,refetch}=useQuery({queryKey:WORKSPACE_QUERY_KEY,queryFn:()=>fetchWorkspaceData(),refetchInterval:connection==='Live'?POLL_LIVE_MS:POLL_DEGRADED_MS,refetchOnWindowFocus:true,refetchOnReconnect:true});
- const location=useViewerLocation({requestOnLoad:true});
+ // The demo account works out of Court Avenue Kitchen Co. in Des Moines, and every
+ // demo rescue is in Iowa. Ranking those against a visitor's real device put
+ // four-figure mileages on every card, so the demo starts from its own address and
+ // only asks for a real position if the visitor offers one.
+ const demoHome=useMemo(()=>{
+  if(!demoOnly)return null;
+  const home=(data?.organizations??[]).find(o=>o.id===data?.profile?.organization_id);
+  return home&&hasPosition(home)?{latitude:home.latitude,longitude:home.longitude}:PILOT_CENTRE;
+ },[demoOnly,data?.organizations,data?.profile?.organization_id]);
+ const location=useViewerLocation({requestOnLoad:!demoOnly,homeLocation:demoHome});
  const [feed,setFeed]=useState<RescueActivity['phase']>('current');
  const [routeRun,setRouteRun]=useState<Opportunity|null>(null);const [routeSummary,setRouteSummary]=useState<RouteSummary|null>(null);const [deliverySummary,setDeliverySummary]=useState<RouteSummary|null>(null); const [detailId,setDetailId]=useState(''); const [tab,setTab]=useState(search?.tab||'overview');const [selected,setSelected]=useState('');const [busy,setBusy]=useState(false);const [clock,setClock]=useState(Date.now());
  useEffect(()=>{if(search?.tab)setTab(search.tab);},[search?.tab]);
@@ -72,7 +81,11 @@ function Dashboard(){
   void fetchPublicFoodBanks(banksCentre.latitude,banksCentre.longitude,{signal:controller.signal}).then(setPublicBanks);
   return()=>controller.abort();
  },[banksCentre.latitude,banksCentre.longitude]);
- const allPoints=useMemo<MapPoint[]>(()=>data?[...data.donations.filter(d=>!inactive.includes(d.status)).map(d=>({id:d.id,lat:d.latitude,lng:d.longitude,label:d.title,kind:'donor' as const})),...data.organizations.filter(o=>o.type==='recipient').map(o=>({id:o.id,lat:o.latitude,lng:o.longitude,label:o.name,kind:'recipient' as const})),...publicBanks.map(b=>({id:b.id,lat:b.latitude,lng:b.longitude,label:b.name,kind:'public' as const}))]:[],[data,publicBanks]);
+ // A donation carries no photo of its own, so the donor organization's photo stands
+ // for its pickup; public listings use the OSM `image` tag when a mapper added one.
+ // A location with none still gets the map's drawn stand-in.
+ const orgPhotoById=useMemo(()=>new Map((data?.organizations??[]).map(o=>[o.id,o.photo_url??null])),[data?.organizations]);
+ const allPoints=useMemo<MapPoint[]>(()=>data?[...data.donations.filter(d=>!inactive.includes(d.status)).map(d=>({id:d.id,lat:d.latitude,lng:d.longitude,label:d.title,kind:'donor' as const,photoUrl:orgPhotoById.get(d.donor_org_id??'')??null})),...data.organizations.filter(o=>o.type==='recipient').map(o=>({id:o.id,lat:o.latitude,lng:o.longitude,label:o.name,kind:'recipient' as const,photoUrl:o.photo_url??null})),...publicBanks.map(b=>({id:b.id,lat:b.latitude,lng:b.longitude,label:b.name,kind:'public' as const,photoUrl:b.photoUrl}))]:[],[data,publicBanks,orgPhotoById]);
  const roles=data?.roles.map(r=>r.role)??[];const coordinator=roles.includes('coordinator');const role=roles[0]??'donor';
  const available=data?.donations.filter(d=>!inactive.includes(d.status))??[];
  const active=data?.donations.find(d=>d.id===selected)??available[0]??data?.donations[0];
@@ -81,7 +94,7 @@ function Dashboard(){
  const accepted=matches.find(m=>m.status==='accepted');
  const delivery=data?.deliveries.find(d=>d.match_id===accepted?.id);
  const recipient=data?.organizations.find(o=>o.id===accepted?.recipient_org_id);
- const detailPoints=useMemo<MapPoint[]>(()=>active?[...(location.coords&&hasPosition(location.coords)?[{id:'viewer-location',lat:location.coords.latitude,lng:location.coords.longitude,label:'Your location',kind:'donor' as const}]:[]),{id:active.id,lat:active.latitude,lng:active.longitude,label:active.title,kind:'donor'},...(recipient?[{id:recipient.id,lat:recipient.latitude,lng:recipient.longitude,label:recipient.name,kind:'recipient' as const}]:[])]:[],[active,recipient,location.coords]);
+ const detailPoints=useMemo<MapPoint[]>(()=>active?[...(location.coords&&hasPosition(location.coords)?[{id:'viewer-location',lat:location.coords.latitude,lng:location.coords.longitude,label:'Your location',kind:'donor' as const}]:[]),{id:active.id,lat:active.latitude,lng:active.longitude,label:active.title,kind:'donor',photoUrl:orgPhotoById.get(active.donor_org_id??'')??null},...(recipient?[{id:recipient.id,lat:recipient.latitude,lng:recipient.longitude,label:recipient.name,kind:'recipient' as const,photoUrl:recipient.photo_url??null}]:[])]:[],[active,recipient,location.coords,orgPhotoById]);
  const detailRoute=useMemo(()=>(active&&accepted&&recipient?location.coords&&hasPosition(location.coords)?{origin:{lat:location.coords.latitude,lng:location.coords.longitude},waypoints:[{lat:active.latitude,lng:active.longitude}],destination:{lat:recipient.latitude,lng:recipient.longitude}}:{origin:{lat:active.latitude,lng:active.longitude},destination:{lat:recipient.latitude,lng:recipient.longitude}}:undefined),[active,accepted,recipient,location.coords]);
  const activity=useMemo(()=>buildActivityFeed({userId:data?.userId??'',organizationId:data?.profile?.organization_id??null,roles,donations:data?.donations??[],matches:data?.matches??[],deliveries:data?.deliveries??[]},clock),[data,roles,clock]);
  const waitingCount=activity.current.filter(a=>a.waitingOnYou).length;
@@ -113,14 +126,14 @@ function Dashboard(){
  <RelayBoard rescues={data.donations} statusTone={tone} onOpen={setDetailId}/></TabsContent>
  <TabsContent value="opportunities" className="mt-6 space-y-6">
  <div className="flex flex-wrap items-end justify-between gap-3">
-  <div><h2 className="text-2xl font-semibold">Volunteer opportunities</h2><p className="mt-1 text-sm text-muted-foreground">{location.coords?'Sorted by how far each pickup is from you.':'Share your location to sort these by distance.'}</p></div>
-  {!location.coords&&<Button variant="outline" size="sm" disabled={location.status==='prompting'} onClick={location.request}><MapPin/> {location.status==='prompting'?'Locating…':'Use my location'}</Button>}
+  <div><h2 className="text-2xl font-semibold">Volunteer opportunities</h2><p className="mt-1 text-sm text-muted-foreground">{location.usingFallback?'Sorted by distance from the demo account’s Des Moines address.':location.coords?'Sorted by how far each pickup is from you.':'Share your location to sort these by distance.'}</p></div>
+  {(!location.coords||location.usingFallback)&&<Button variant="outline" size="sm" disabled={location.status==='prompting'} onClick={location.request}><MapPin/> {location.status==='prompting'?'Locating…':'Use my location'}</Button>}
  </div>
  {location.error&&<p role="status" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{location.error}</p>}
  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
   <OpportunityBoard opportunities={opportunities} viewer={location.coords} now={clock} canDrive={roles.includes('driver')||coordinator} busy={busy} onOpen={setDetailId} onClaim={id=>{if(!location.coords)location.request();void act(id,'claim');}} userId={data.userId} onDelete={deleteDonation} onRouteChange={run=>{setRouteRun(run);setRouteSummary(null);}}/>
   <div className="space-y-3 xl:sticky xl:top-20 xl:self-start">
-   <LiveMap points={routeRun&&routeRun.foodBank?[...(location.coords&&hasPosition(location.coords)?[{id:'viewer-location',lat:location.coords.latitude,lng:location.coords.longitude,label:'Your location',kind:'donor' as const}]:[]),{id:`${routeRun.donationId}-p`,lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude,label:routeRun.pickupAddress,kind:'donor'},{id:routeRun.foodBank.id,lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude,label:routeRun.foodBank.name,kind:'recipient'}]:allPoints} route={routeRun&&routeRun.foodBank?location.coords&&hasPosition(location.coords)?{origin:{lat:location.coords.latitude,lng:location.coords.longitude},waypoints:[{lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude}],destination:{lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude}}:{origin:{lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude},destination:{lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude}}:undefined} onRouteSummary={setRouteSummary}/>
+   <LiveMap points={routeRun&&routeRun.foodBank?[...(location.coords&&hasPosition(location.coords)?[{id:'viewer-location',lat:location.coords.latitude,lng:location.coords.longitude,label:'Your location',kind:'donor' as const}]:[]),{id:`${routeRun.donationId}-p`,lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude,label:routeRun.pickupAddress,kind:'donor',photoUrl:orgPhotoById.get(donorOrgIdByDonation.get(routeRun.donationId)??'')??null},{id:routeRun.foodBank.id,lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude,label:routeRun.foodBank.name,kind:'recipient',photoUrl:routeRun.foodBank.photoUrl}]:allPoints} route={routeRun&&routeRun.foodBank?location.coords&&hasPosition(location.coords)?{origin:{lat:location.coords.latitude,lng:location.coords.longitude},waypoints:[{lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude}],destination:{lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude}}:{origin:{lat:routeRun.pickup.latitude,lng:routeRun.pickup.longitude},destination:{lat:routeRun.foodBank.latitude,lng:routeRun.foodBank.longitude}}:undefined} onRouteSummary={setRouteSummary}/>
    {routeRun&&routeRun.foodBank?<div className="space-y-3 rounded-md border bg-card p-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
      <div className="min-w-0"><p className="truncate text-sm font-medium">{routeRun.title}</p><p className="truncate text-xs text-muted-foreground">to {routeRun.foodBank.name}</p></div>

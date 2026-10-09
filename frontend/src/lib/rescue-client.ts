@@ -460,7 +460,8 @@ export async function postNewDonation(data: {
 
   const newDonation: Donation = {
     id: newId,
-    donor_user_id: DEMO_USER_ID,
+    // The signed-in viewer, so the post they just made is the post they can delete.
+    donor_user_id: current.userId,
     donor_org_id: "d2000000-0000-4000-a000-000000000008",
     title: data.title,
     category: data.category,

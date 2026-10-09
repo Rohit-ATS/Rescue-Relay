@@ -15,11 +15,15 @@ import {
 let mapConstructions = 0;
 let markerConstructions = 0;
 let polylineConstructions = 0;
+let markerClicks: Array<() => void> = [];
+let lastPopup: string | HTMLElement | null = null;
 
 function installFakeMapsApi(routeImpl?: () => Promise<unknown>) {
   mapConstructions = 0;
   markerConstructions = 0;
   polylineConstructions = 0;
+  markerClicks = [];
+  lastPopup = null;
   (window as unknown as { google: unknown }).google = {
     maps: {
       Map: class {
@@ -33,13 +37,17 @@ function installFakeMapsApi(routeImpl?: () => Promise<unknown>) {
           markerConstructions += 1;
         }
         setMap() {}
-        addListener() {}
+        addListener(event: string, handler: () => void) {
+          markerClicks.push(handler);
+        }
       },
       LatLngBounds: class {
         extend() {}
       },
       InfoWindow: class {
-        setContent() {}
+        setContent(content: string | HTMLElement) {
+          lastPopup = content;
+        }
         open() {}
         close() {}
       },
@@ -388,5 +396,57 @@ describe("RouteDirections", () => {
   it("renders nothing before a route has been drawn", () => {
     const { container } = render(<RouteDirections summary={null} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("Marker popups", () => {
+  /** Opens the first marker's popup and hands back its element. */
+  async function openFirstPopup(point: MapPoint) {
+    render(<LiveMap points={[point]} />);
+    await waitFor(() => expect(markerClicks.length).toBe(1));
+    markerClicks[0]?.();
+    return lastPopup as HTMLElement;
+  }
+
+  it("shows the partner's photo above its name", async () => {
+    const popup = await openFirstPopup({
+      ...BANK,
+      photoUrl: "https://foodbankiowa.org/hero.jpg",
+    });
+
+    const image = popup.querySelector("img");
+    expect(image?.getAttribute("src")).toBe("https://foodbankiowa.org/hero.jpg");
+    expect(image?.getAttribute("alt")).toBe("Riverbend Food Pantry");
+  });
+
+  // Every popup carries a picture, so one without a photo gets the drawn stand-in
+  // rather than a gap where the others have an image.
+  it("draws a stand-in for a location with no photo", async () => {
+    const popup = await openFirstPopup({ ...BANK });
+
+    const image = popup.querySelector("img");
+    expect(image?.getAttribute("src")).toContain("data:image/svg+xml");
+    expect(image?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("swaps a photo that fails to load for the stand-in", async () => {
+    const popup = await openFirstPopup({ ...BANK, photoUrl: "https://example.org/gone.jpg" });
+
+    const image = popup.querySelector("img") as HTMLImageElement;
+    image.dispatchEvent(new Event("error"));
+
+    expect(image.getAttribute("src")).toContain("data:image/svg+xml");
+    expect(popup.querySelectorAll("img")).toHaveLength(1);
+  });
+
+  // The URL comes from a partner record a coordinator can edit.
+  it("refuses a photo URL that is not http(s)", async () => {
+    const popup = await openFirstPopup({
+      ...BANK,
+      photoUrl: "javascript:alert(1)",
+    });
+
+    const image = popup.querySelector("img");
+    expect(image?.getAttribute("src")).toContain("data:image/svg+xml");
   });
 });

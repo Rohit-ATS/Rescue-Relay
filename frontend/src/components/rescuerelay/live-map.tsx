@@ -71,6 +71,8 @@ export type MapPoint = {
   label: string;
   /** "public" is an OpenStreetMap food bank: real, but not a verified partner. */
   kind: "donor" | "recipient" | "public";
+  /** Partner photo, shown in the marker popup. Public OSM listings have none. */
+  photoUrl?: string | null | undefined;
 };
 
 export type MapRoute = {
@@ -239,6 +241,53 @@ function escapeHtml(value: string) {
   );
 }
 
+/**
+ * Only http(s) images are shown.
+ *
+ * The URL comes from a partner record, which a coordinator can edit, so it reaches
+ * this popup as data rather than as something to trust: `javascript:` and `data:`
+ * never become the src of an element this builds.
+ */
+function safeImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The drawn stand-in for a location with no photograph.
+ *
+ * Every popup carries a picture, so the ones without a supplied photo get this
+ * rather than a gap: a tinted panel in the marker's own colour with the glyph that
+ * marker uses, which keeps a row of popups reading as one set. A pickup, a partner
+ * and a public listing are each distinguishable at a glance.
+ */
+function placeholderImage(kind: MapPoint["kind"]) {
+  const { fill } = MARKER_COLORS[kind];
+  const glyph =
+    kind === "donor"
+      ? '<path d="M26 28h28v22H26z" fill="none" stroke="' +
+        fill +
+        '" stroke-width="3" stroke-linejoin="round"/><path d="M26 36h28" stroke="' +
+        fill +
+        '" stroke-width="3"/>'
+      : '<path d="M24 40 40 26l16 14v16H24z" fill="none" stroke="' +
+        fill +
+        '" stroke-width="3" stroke-linejoin="round"/>';
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">' +
+    '<rect width="80" height="80" fill="' +
+    fill +
+    '" opacity="0.1"/>' +
+    glyph +
+    "</svg>";
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+}
+
 function createMarkerPopup(point: MapPoint, externalLink: string) {
   const popup = document.createElement("div");
   popup.className = "rr-map-popup";
@@ -255,6 +304,8 @@ function createMarkerPopup(point: MapPoint, externalLink: string) {
         max-width: 240px;
         padding: 4px;
       }
+      .rr-map-popup__photo { background: #eceade; border-radius: 6px; display: block; height: 96px; margin-bottom: 8px; object-fit: cover; width: 100%; }
+      .rr-map-popup__photo--drawn { object-fit: contain; }
       .rr-map-popup__title { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
       .rr-map-popup__kind { color: ${MARKER_COLORS[point.kind].fill}; font-size: 11px; font-weight: 600; letter-spacing: .04em; margin-bottom: 6px; text-transform: uppercase; }
       .rr-map-popup__link { color: #004c25; display: inline-block; font-size: 12px; font-weight: 600; text-decoration: underline; }
@@ -262,6 +313,37 @@ function createMarkerPopup(point: MapPoint, externalLink: string) {
     `<div class="rr-map-popup__title">${escapeHtml(point.label)}</div>` +
     `<div class="rr-map-popup__kind">${point.kind === "donor" ? "Pickup Location" : point.kind === "recipient" ? "Food Bank Partner" : "Food Bank · OpenStreetMap"}</div>` +
     `<a class="rr-map-popup__link" href="${externalLink}" target="_blank" rel="noreferrer">Open in Google Maps →</a>`;
+
+  // Built as an element rather than markup so a photo that 404s can swap itself for
+  // the drawn stand-in, instead of leaving a torn-image icon above the name.
+  const photo = safeImageUrl(point.photoUrl);
+  const fallback = placeholderImage(point.kind);
+  const image = document.createElement("img");
+  image.className = photo
+    ? "rr-map-popup__photo"
+    : "rr-map-popup__photo rr-map-popup__photo--drawn";
+  image.src = photo ?? fallback;
+  // The stand-in says nothing the title does not, so it is hidden from readers.
+  if (photo) {
+    image.alt = point.label;
+  } else {
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+  }
+  image.loading = "lazy";
+  image.decoding = "async";
+  image.addEventListener("error", () => {
+    // Guarded: the stand-in is an inline data URI, but a second failure must not
+    // reassign the same src and spin.
+    if (image.dataset["fallback"] === "true") return;
+    image.dataset["fallback"] = "true";
+    image.src = fallback;
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+    image.classList.add("rr-map-popup__photo--drawn");
+  });
+  popup.insertBefore(image, popup.querySelector(".rr-map-popup__title"));
+
   return popup;
 }
 
@@ -365,7 +447,9 @@ export function LiveMap({
   const [sessionApiKey, setSessionApiKey] = useState(readBrowserMapsKey);
   const [configOpen, setConfigOpen] = useState(false);
 
-  const pointsKey = JSON.stringify(points.map((p) => [p.id, p.lat, p.lng, p.label, p.kind]));
+  const pointsKey = JSON.stringify(
+    points.map((p) => [p.id, p.lat, p.lng, p.label, p.kind, p.photoUrl ?? ""]),
+  );
   const routeKey = JSON.stringify(route ?? null);
 
   const pointsRef = useRef(points);

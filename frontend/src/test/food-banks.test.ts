@@ -65,6 +65,25 @@ describe("Public food banks", () => {
     expect(banks.map((b) => b.name)).toEqual(["Together Omaha"]);
   });
 
+  // Most OSM entries have no photo, but the few that do should reach the popup.
+  it("carries the OSM image tag when a mapper supplied one", async () => {
+    const withImage = {
+      elements: [
+        {
+          type: "node",
+          id: 7,
+          lat: 41.6,
+          lon: -93.6,
+          tags: { name: "Northside Pantry", image: "https://example.org/pantry.jpg" },
+        },
+      ],
+    };
+
+    const banks = await fetchPublicFoodBanks(41.5908, -93.6208, { fetchImpl: okFetch(withImage) });
+
+    expect(banks[0]?.photoUrl).toBe("https://example.org/pantry.jpg");
+  });
+
   it("reaches far enough to cover the pilot state, not just the metro", () => {
     expect(DEFAULT_RADIUS_M).toBeGreaterThanOrEqual(200000);
   });
@@ -115,6 +134,7 @@ describe("Public food banks", () => {
       name: "Berkeley Food Pantry",
       latitude: 37.8763732,
       longitude: -122.2832523,
+      photoUrl: null,
     });
     expect(banks[1]?.latitude).toBe(37.33);
   });
@@ -134,12 +154,10 @@ describe("Public food banks", () => {
   });
 
   it("accepts an empty answer from a working mirror instead of asking the next one", async () => {
-    const empty = vi
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({ elements: [] }),
-      }) as unknown as typeof fetch;
+    const empty = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ elements: [] }),
+    }) as unknown as typeof fetch;
 
     expect(await fetchPublicFoodBanks(37.5, -122, { fetchImpl: empty })).toEqual([]);
     expect(empty).toHaveBeenCalledTimes(1);
